@@ -1,0 +1,259 @@
+{
+  "id": null,
+  "uid": "fraud-engine-transactions",
+  "title": "Fraud Engine Transactions",
+  "tags": ["fraud-engine", "transactions"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "refresh": "30s",
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Evaluated transactions",
+      "type": "stat",
+      "datasource": {
+        "type": "postgres",
+        "uid": "fraudengine-postgres"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 0,
+        "y": 0
+      },
+      "targets": [
+        {
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT COUNT(*) AS value FROM fraud_evaluations fe WHERE $__timeFilter(fe.evaluated_at)",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 2,
+      "title": "Transactions by action",
+      "type": "piechart",
+      "datasource": {
+        "type": "postgres",
+        "uid": "fraudengine-postgres"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 6,
+        "y": 0
+      },
+      "targets": [
+        {
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT fe.action AS action, COUNT(*) AS value FROM fraud_evaluations fe WHERE $__timeFilter(fe.evaluated_at) GROUP BY fe.action ORDER BY value DESC",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "right",
+          "showLegend": true
+        },
+        "pieType": "donut",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      }
+    },
+    {
+      "id": 3,
+      "title": "Average transaction amount by currency",
+      "type": "barchart",
+      "datasource": {
+        "type": "postgres",
+        "uid": "fraudengine-postgres"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 10,
+        "x": 14,
+        "y": 0
+      },
+      "targets": [
+        {
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT COALESCE(fe.transaction_json::jsonb ->> 'currency', 'Unknown') AS currency, AVG((fe.transaction_json::jsonb ->> 'amount')::numeric) AS average_amount FROM fraud_evaluations fe WHERE $__timeFilter(fe.evaluated_at) GROUP BY currency ORDER BY currency",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "orientation": "auto",
+        "showValue": "auto",
+        "stacking": "none",
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        },
+        "xField": "currency"
+      }
+    },
+    {
+      "id": 4,
+      "title": "Evaluations over time",
+      "type": "timeseries",
+      "datasource": {
+        "type": "postgres",
+        "uid": "fraudengine-postgres"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 8
+      },
+      "targets": [
+        {
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT $__timeGroupAlias(fe.evaluated_at, '1h'), fe.action AS metric, COUNT(*) AS value FROM fraud_evaluations fe WHERE $__timeFilter(fe.evaluated_at) GROUP BY 1, 2 ORDER BY 1",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 5,
+      "title": "Average risk score over time",
+      "type": "timeseries",
+      "datasource": {
+        "type": "postgres",
+        "uid": "fraudengine-postgres"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 8
+      },
+      "targets": [
+        {
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT $__timeGroupAlias(fe.evaluated_at, '1h'), AVG(fe.risk_score) AS value FROM fraud_evaluations fe WHERE $__timeFilter(fe.evaluated_at) GROUP BY 1 ORDER BY 1",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "showPoints": "never"
+          },
+          "min": 0,
+          "max": 100
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      }
+    },
+    {
+      "id": 6,
+      "title": "Recent transactions",
+      "type": "table",
+      "datasource": {
+        "type": "postgres",
+        "uid": "fraudengine-postgres"
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 17
+      },
+      "targets": [
+        {
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT fe.evaluated_at AS \"Evaluated at\", fe.transaction_id AS \"Transaction ID\", fe.account_id AS \"Account ID\", (fe.transaction_json::jsonb ->> 'amount')::numeric AS \"Amount\", fe.transaction_json::jsonb ->> 'currency' AS \"Currency\", fe.action AS \"Action\", fe.risk_level AS \"Risk level\", fe.risk_score AS \"Risk score\" FROM fraud_evaluations fe WHERE $__timeFilter(fe.evaluated_at) ORDER BY fe.evaluated_at DESC LIMIT 100",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "cellHeight": "sm",
+        "showHeader": true
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          }
+        },
+        "overrides": []
+      }
+    }
+  ],
+  "annotations": {
+    "list": []
+  },
+  "templating": {
+    "list": []
+  }
+}

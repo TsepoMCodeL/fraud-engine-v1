@@ -1,0 +1,24 @@
+{
+    "configurations": [
+        {
+            "type": "java",
+            "name": "Spring Boot-FraudEngineApplication<fraud-engine-v1>",
+            "request": "launch",
+            "cwd": "${workspaceFolder}",
+            "mainClass": "fraudengine.FraudEngineApplication",
+            "projectName": "fraud-engine-v1",
+            "args": "",
+            "envFile": "${workspaceFolder}/.env"
+        },
+        {
+            "type": "java",
+            "name": "Spring Boot-Main<fraud-engine-v1>",
+            "request": "launch",
+            "cwd": "${workspaceFolder}",
+            "mainClass": "fraudengine.Main",
+            "projectName": "fraud-engine-v1",
+            "args": "",
+            "envFile": "${workspaceFolder}/.env"
+        }
+    ]
+}
