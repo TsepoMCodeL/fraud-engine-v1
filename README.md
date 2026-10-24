@@ -8,37 +8,18 @@ responsible for real-time velocity enrichment and blacklist lookups.
 Runtime PostgreSQL queries are stored under `src/main/resources/db/queries/`,
 separately from Flyway schema migrations under `src/main/resources/db/migration/`.
 
-The application imports `.env` from the project root when it starts. Set the
-database and admin credentials there. The checked-in `.env.example` documents
-the required settings. Verify or update the values in your local `.env` before
-running the application. Environment variables supplied by the operating
-system override values from the file.
+The checked-in `.env.example` documents the required settings. Verify or update the values in your local `.env` before
+running the application. 
 
-Configure the PostgreSQL and Redis connections with:
+Configure the PostgreSQL and Redis connections.
 
-| Environment variable | Default |
-| --- | --- |
-| `DB_HOST` | `postgres` |
-| `DB_PORT` | `5432` |
-| `POSTGRES_DB` | `fraudengine` |
-| `REDIS_HOST` | `redis` |
-| `REDIS_PORT` | `6379` |
+Also configure `FRAUD_ADMIN_USERNAME` and `FRAUD_ADMIN_PASSWORD`, these admin credentials are required at startup.
 
-Create the database and user before starting the service, or provide equivalent
-credentials for an existing PostgreSQL instance. The database username and
-password have no defaults. Also configure `FRAUD_ADMIN_USERNAME` and
-`FRAUD_ADMIN_PASSWORD`; these admin credentials are required at startup.
-
-Edit `.env` with your local credentials, then launch the application from the
-project root:
-
-```powershell
+```terminal/powershell
 .\mvnw.cmd spring-boot:run
 ```
 
-The default hosts `postgres` and `redis` are intended for Docker Compose
-service discovery. When running the application directly on the host instead
-of in Compose, set `DB_HOST=localhost` and `REDIS_HOST=localhost` in `.env`.
+The default hosts `postgres` and `redis` are intended for Docker Compose service discovery.
 
 ## Docker Compose
 
@@ -49,7 +30,7 @@ Redis ports are not published to the host by default. The app is available at
 
 1. From the project root, build and start the stack:
 
-   ```powershell
+   ```terminal/powershell
    docker compose --env-file .compose.env up --build -d
    ```
 
@@ -58,14 +39,14 @@ Redis ports are not published to the host by default. The app is available at
 
 2. Check service status and application health:
 
-   ```powershell
+   ```terminal/powershell
    docker compose --env-file .compose.env ps
    Invoke-RestMethod http://localhost:8080/api/v1/fraud/health
    ```
 
 3. Stop the stack while retaining database data:
 
-   ```powershell
+   ```terminal/powershell
    docker compose --env-file .compose.env down
    ```
 
