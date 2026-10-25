@@ -2,4 +2,23 @@
 .env.*
 !.env.example
 !.compose.env
+
+# Build output
 /target/
+/build/
+/out/
+/.gradle/
+
+# Compiled Java and runtime artifacts
+*.class
+*.log
+hs_err_pid*
+replay_pid*
+
+# IDE-local files
+/.idea/
+*.iml
+
+# Operating system files
+.DS_Store
+Thumbs.db
