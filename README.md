@@ -1,5 +1,8 @@
 # Fraud Engine
 
+See [ARCHITECTURE.md](./ARCHITECTURE.md) for the system context, evaluation
+flow, storage responsibilities, security model, and extension points.
+
 ## Persistent transaction evaluations
 
 The service stores each evaluated transaction and its evaluation in PostgreSQL.
