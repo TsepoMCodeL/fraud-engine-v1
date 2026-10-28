@@ -70,41 +70,11 @@ this application.
 
 ## 4. Transaction evaluation flow
 
-```mermaid
-sequenceDiagram
-    participant C as Client
-    participant API as FraudEvaluationController
-    participant S as FraudEvaluationService
-    participant E as DefaultFraudEngine
-    participant R as RedisContextEnricher
-    participant Rules as Ordered fraud rules
-    participant D as ThresholdDecisionEngine
-    participant DB as PostgreSQL
-    participant K as Kafka
-    participant P as Outbox publisher
-
-    C->>API: POST /api/v1/fraud/evaluate
-    API->>S: Validated request DTO
-    S->>S: Reject client-supplied customer profile; check timestamp skew
-    S->>E: Evaluate transaction
-    E->>R: Enrich transaction and default profile
-    R-->>E: Velocity counts, latest transaction, blacklist hits
-    E->>Rules: Evaluate enabled rules by priority
-    Rules-->>E: Rule results (possibly short-circuited)
-    E->>D: Aggregate results
-    D-->>E: Decision and evaluated-rule summaries
-    opt Decision is APPROVE and auto-record is enabled
-        E->>R: Record transaction for future velocity checks
-    end
-    E-->>S: Fraud decision
-    S->>DB: Persist evaluation and event in one transaction
-    DB-->>S: Commit
-    S-->>API: Evaluation response
-    API-->>C: 200 response
-    P->>DB: Claim pending outbox rows
-    P->>K: Publish event (keyed by account ID)
-    P->>DB: Mark sent or schedule retry
-```
+The request DTO requires transaction ID, account ID, and a positive amount.
+Currency defaults to `ZAR` and timestamp defaults to the current time if not
+provided. A supplied timestamp more than the configured future skew is
+rejected. Clients cannot provide `customerProfile`; the service currently uses
+a default profile for the account when invoking the engine.
 
 If Kafka is unavailable, evaluation persistence and the synchronous response
 continue as long as PostgreSQL and Redis are available. Pending outbox rows
@@ -112,12 +82,6 @@ remain durable and are retried with bounded exponential backoff. Publishing is
 at least once: a crash after broker acknowledgement but before the database
 marks the row published may produce a duplicate. Consumers should deduplicate
 by the stable `eventId` (the evaluation ID).
-
-The request DTO requires transaction ID, account ID, and a positive amount.
-Currency defaults to `ZAR` and timestamp defaults to the current time if not
-provided. A supplied timestamp more than the configured future skew is
-rejected. Clients cannot provide `customerProfile`; the service currently uses
-a default profile for the account when invoking the engine.
 
 Rules are sorted by ascending priority. The configured production rules are:
 
