@@ -24,7 +24,7 @@ class GeoVelocityAnomalyRuleTest {
                 .id("TX-1")
                 .accountId("ACC-1")
                 .amount(50.0)
-                .location(new GeoLocation(40.7128, -74.0060, "US"))
+                .location(new GeoLocation(40.7128, -74.0060, "ZA"))
                 .build();
 
         FraudEvaluationContext ctx = new FraudEvaluationContext(

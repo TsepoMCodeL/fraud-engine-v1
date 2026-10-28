@@ -57,7 +57,7 @@ class RedisContextEnricherTest {
     }
 
     @Test
-    @DisplayName("enrich: parses pipelined Redis responses into EnrichedContext")
+    @DisplayName("enrich: parses pipelined read-only Redis responses into EnrichedContext")
     void shouldParsePipelinedRedisResults() throws Exception {
         Transaction tx = Transaction.builder()
                 .id("TX-CURRENT")
@@ -66,7 +66,7 @@ class RedisContextEnricherTest {
                 .timestamp(Instant.now())
                 .ipAddress("192.0.2.1")
                 .deviceId("DEV-100")
-                .location(new GeoLocation(40.7128, -74.0060, "US"))
+                .location(new GeoLocation(40.7128, -74.0060, "ZA"))
                 .build();
 
         Transaction priorTx = Transaction.builder()
@@ -76,22 +76,20 @@ class RedisContextEnricherTest {
                 .timestamp(Instant.now().minus(2, ChronoUnit.MINUTES))
                 .ipAddress("192.0.2.1")
                 .deviceId("DEV-100")
-                .location(new GeoLocation(40.7128, -74.0060, "US"))
+                .location(new GeoLocation(40.7128, -74.0060, "ZA"))
                 .build();
 
         String priorTxJson = objectMapper.writeValueAsString(priorTx);
 
-        // Simulated pipeline results:
-        // [0]: prunedCount (0L)
-        // [1]: count1m (1L)
-        // [2]: count10m (2L)
-        // [3]: count24h (4L)
-        // [4]: latest transaction JSON
-        // [5]: isAccountBlacklisted (false)
-        // [6]: isIpBlacklisted (false)
-        // [7]: isDeviceBlacklisted (false)
+        // Simulated read-only pipeline results:
+        // [0]: count1m (1L)
+        // [1]: count10m (2L)
+        // [2]: count24h (4L)
+        // [3]: latest transaction JSON
+        // [4]: isAccountBlacklisted (false)
+        // [5]: isIpBlacklisted (false)
+        // [6]: isDeviceBlacklisted (false)
         List<Object> mockPipelineResults = List.of(
-                0L,
                 1L,
                 2L,
                 4L,
@@ -133,7 +131,7 @@ class RedisContextEnricherTest {
                 .build();
 
         List<Object> mockResults = List.of(
-                0L, 0L, 0L, 0L,
+                0L, 0L, 0L,
                 Collections.emptySet(),
                 Boolean.TRUE // Account is blacklisted!
         );
@@ -146,7 +144,7 @@ class RedisContextEnricherTest {
     }
 
     @Test
-    @DisplayName("enrich: bounds velocity reads to the event timestamp")
+    @DisplayName("enrich: bounds velocity reads to the event timestamp without pruning writes")
     void shouldBoundVelocityQueriesToEventTimestamp() throws Exception {
         Instant eventTime = Instant.parse("2026-10-21T10:00:00Z");
         Transaction tx = Transaction.builder()
@@ -155,7 +153,7 @@ class RedisContextEnricherTest {
                 .amount(50.00)
                 .timestamp(eventTime)
                 .build();
-        List<Object> pipelineResults = List.of(0L, 0L, 0L, 0L, Collections.emptySet(), Boolean.FALSE);
+        List<Object> pipelineResults = List.of(0L, 0L, 0L, Collections.emptySet(), Boolean.FALSE);
         when(redisOperations.executePipelined(any(SessionCallback.class))).thenReturn(pipelineResults);
         when(redisOperations.opsForZSet()).thenReturn(zSetOperations);
         when(redisOperations.opsForSet()).thenReturn(setOperations);
@@ -171,6 +169,8 @@ class RedisContextEnricherTest {
         verify(zSetOperations, times(3)).count(eq(key), anyDouble(), eq(eventTimeMs));
         verify(zSetOperations).reverseRangeByScore(
                 eq(key), anyDouble(), eq(eventTimeMs), eq(0L), eq(1L));
+        // Verify no writes (removeRangeByScore) are issued during enrichment
+        verify(zSetOperations, never()).removeRangeByScore(anyString(), anyDouble(), anyDouble());
     }
 
     @Test
@@ -216,7 +216,7 @@ class RedisContextEnricherTest {
     }
 
     @Test
-    @DisplayName("recordTransaction: executes pipelined zadd and expire")
+    @DisplayName("recordTransaction: executes pipelined prune, zadd, and expire")
     void shouldRecordTransactionViaPipeline() {
         Transaction tx = Transaction.builder()
                 .id("TX-REC")
@@ -224,9 +224,17 @@ class RedisContextEnricherTest {
                 .amount(25.00)
                 .timestamp(Instant.now())
                 .build();
+        when(redisOperations.opsForZSet()).thenReturn(zSetOperations);
 
         redisEnricher.recordTransaction(tx);
 
-        verify(redisOperations).executePipelined(any(SessionCallback.class));
+        ArgumentCaptor<SessionCallback<?>> captor = ArgumentCaptor.forClass(SessionCallback.class);
+        verify(redisOperations).executePipelined(captor.capture());
+
+        captor.getValue().execute(redisOperations);
+        String vKey = "fraud:velocity:account:ACC-REC";
+        verify(zSetOperations).removeRangeByScore(eq(vKey), eq(Double.NEGATIVE_INFINITY), anyDouble());
+        verify(zSetOperations).add(eq(vKey), anyString(), eq((double) tx.timestamp().toEpochMilli()));
+        verify(redisOperations).expire(eq(vKey), eq(Duration.ofHours(48)));
     }
 }

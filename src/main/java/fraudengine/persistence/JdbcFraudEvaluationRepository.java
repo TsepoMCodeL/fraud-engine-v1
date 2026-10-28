@@ -10,6 +10,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectReader;
+import tools.jackson.databind.ObjectWriter;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -23,8 +25,11 @@ public class JdbcFraudEvaluationRepository implements FraudEvaluationRepository 
     private static final Logger log = LoggerFactory.getLogger(JdbcFraudEvaluationRepository.class);
 
     private final JdbcClient jdbcClient;
-    private final ObjectMapper objectMapper;
     private final FraudEvaluationSql sql;
+    private final ObjectWriter transactionWriter;
+    private final ObjectWriter evaluationWriter;
+    private final ObjectReader transactionReader;
+    private final ObjectReader evaluationReader;
 
     public JdbcFraudEvaluationRepository(
             JdbcClient jdbcClient,
@@ -32,8 +37,11 @@ public class JdbcFraudEvaluationRepository implements FraudEvaluationRepository 
             FraudEvaluationSql sql
     ) {
         this.jdbcClient = jdbcClient;
-        this.objectMapper = objectMapper;
         this.sql = sql;
+        this.transactionWriter = objectMapper.writerFor(Transaction.class);
+        this.evaluationWriter = objectMapper.writerFor(EvaluateTransactionResponseDto.class);
+        this.transactionReader = objectMapper.readerFor(Transaction.class);
+        this.evaluationReader = objectMapper.readerFor(EvaluateTransactionResponseDto.class);
     }
 
     @Override
@@ -58,8 +66,8 @@ public class JdbcFraudEvaluationRepository implements FraudEvaluationRepository 
                     .param("action", evaluation.action().name())
                     .param("riskLevel", evaluation.riskLevel().name())
                     .param("riskScore", evaluation.riskScore())
-                    .param("transactionJson", objectMapper.writeValueAsString(transaction))
-                    .param("evaluationJson", objectMapper.writeValueAsString(evaluation))
+                    .param("transactionJson", transactionWriter.writeValueAsString(transaction))
+                    .param("evaluationJson", evaluationWriter.writeValueAsString(evaluation))
                     .update();
         } catch (Exception ex) {
             throw new IllegalStateException("Unable to persist fraud evaluation", ex);
@@ -150,8 +158,8 @@ public class JdbcFraudEvaluationRepository implements FraudEvaluationRepository 
     private TransactionEvaluationResponseDto mapEvaluation(ResultSet resultSet, int rowNumber) throws SQLException {
         try {
             Transaction transaction = mapTransaction(resultSet.getString("transaction_json"));
-            EvaluateTransactionResponseDto evaluation = objectMapper.readValue(
-                    resultSet.getString("evaluation_json"), EvaluateTransactionResponseDto.class);
+            EvaluateTransactionResponseDto evaluation = evaluationReader.readValue(
+                    resultSet.getString("evaluation_json"));
             return new TransactionEvaluationResponseDto(transaction, evaluation);
         } catch (Exception ex) {
             throw new IllegalStateException("Unable to read persisted fraud evaluation", ex);
@@ -160,7 +168,7 @@ public class JdbcFraudEvaluationRepository implements FraudEvaluationRepository 
 
     private Transaction mapTransaction(String transactionJson) {
         try {
-            return objectMapper.readValue(transactionJson, Transaction.class);
+            return transactionReader.readValue(transactionJson);
         } catch (Exception ex) {
             throw new IllegalStateException("Unable to read persisted transaction", ex);
         }

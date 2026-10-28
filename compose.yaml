@@ -23,6 +23,35 @@ services:
       retries: 12
     restart: unless-stopped
 
+  kafka:
+    image: apache/kafka:4.1.0
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: INTERNAL://:29092,CONTROLLER://:29093,EXTERNAL://:9092
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:29092,EXTERNAL://localhost:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:29093
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+    ports:
+      - "127.0.0.1:9092:9092"
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    restart: unless-stopped
+
   fraud-engine:
     build:
       context: .
@@ -33,6 +62,7 @@ services:
     environment:
       DB_HOST: postgres
       REDIS_HOST: redis
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
     ports:
       - "8080:8080"
     depends_on:
@@ -40,6 +70,33 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      kafka:
+        condition: service_healthy
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    env_file:
+      - path: .env
+        format: raw
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        escaped_username=$(printf '%s' "$$FRAUD_ADMIN_USERNAME" | sed "s/'/''/g")
+        printf '%s' "$$FRAUD_ADMIN_PASSWORD" > /tmp/fraud-admin-password
+        {
+          printf '%s\n' 'global:' '  scrape_interval: 5s' '  evaluation_interval: 5s' 'scrape_configs:' '  - job_name: fraud-engine' '    metrics_path: /actuator/prometheus' '    basic_auth:'
+          printf "      username: '%s'\n" "$$escaped_username"
+          printf '%s\n' '      password_file: /tmp/fraud-admin-password' '    static_configs:' '      - targets: ["fraud-engine:8080"]'
+        } > /tmp/prometheus.yml
+        exec /bin/prometheus --config.file=/tmp/prometheus.yml --web.enable-remote-write-receiver --storage.tsdb.retention.time=15d
+    volumes:
+      - prometheus-data:/prometheus
+    ports:
+      - "127.0.0.1:9090:9090"
+    depends_on:
+      fraud-engine:
+        condition: service_started
     restart: unless-stopped
 
   grafana:
@@ -58,8 +115,30 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      prometheus:
+        condition: service_started
     restart: unless-stopped
+
+  k6:
+    image: grafana/k6:0.57.0
+    profiles: ["loadtest"]
+    command: ["run", "--out", "experimental-prometheus-rw", "/scripts/fraud-engine-load.js"]
+    environment:
+      BASE_URL: http://fraud-engine:8080
+      K6_PROMETHEUS_RW_SERVER_URL: http://prometheus:9090/api/v1/write
+      K6_PROMETHEUS_RW_TREND_STATS: p(95),p(99),avg,max
+      TEST_RUN_ID: ${TEST_RUN_ID:-local}
+    volumes:
+      - ./load-test:/scripts:ro
+    depends_on:
+      fraud-engine:
+        condition: service_started
+      prometheus:
+        condition: service_started
+    restart: "no"
 
 volumes:
   grafana-data:
   postgres-data:
+  kafka-data:
+  prometheus-data:

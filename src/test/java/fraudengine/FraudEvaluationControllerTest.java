@@ -3,6 +3,7 @@ package fraudengine;
 import fraudengine.api.dto.BlacklistEntityRequestDto;
 import fraudengine.api.dto.EvaluateTransactionRequestDto;
 import fraudengine.api.dto.LocationDto;
+import fraudengine.persistence.FraudEvaluationOutboxRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -14,6 +15,8 @@ import tools.jackson.databind.ObjectMapper;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import static org.hamcrest.Matchers.*;
@@ -28,6 +31,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "spring.datasource.url=jdbc:h2:mem:fraudengine;MODE=PostgreSQL;DB_CLOSE_DELAY=-1",
         "spring.datasource.username=sa",
         "spring.datasource.password=",
+        "fraud.kafka.publisher-enabled=false",
         "fraud.engine.admin.username=test-admin",
         "fraud.engine.admin.password=test-password"
 })
@@ -49,6 +53,9 @@ class FraudEvaluationControllerTest {
     @Autowired
     private ObjectMapper objectMapper;
 
+    @Autowired
+    private FraudEvaluationOutboxRepository outboxRepository;
+
     @Test
     @DisplayName("POST /api/v1/fraud/evaluate: Legitimate transaction returns 200 with APPROVE")
     void shouldApproveCleanTransaction() throws Exception {
@@ -61,7 +68,7 @@ class FraudEvaluationControllerTest {
                 "MERCH-GROCERY-1",
                 "5411",
                 "192.0.2.1",
-                new LocationDto(40.7128, -74.0060, "US"),
+                new LocationDto(40.7128, -74.0060, "ZA"),
                 "DEVICE-USER-1",
                 Map.of("channel", "MOBILE_APP"),
                 null
@@ -90,7 +97,7 @@ class FraudEvaluationControllerTest {
                 "MERCH-HISTORY-1",
                 "5411",
                 "192.0.2.10",
-                new LocationDto(40.7128, -74.0060, "US"),
+                new LocationDto(40.7128, -74.0060, "ZA"),
                 "DEVICE-HISTORY-1",
                 Map.of("channel", "WEB"),
                 null
@@ -104,6 +111,13 @@ class FraudEvaluationControllerTest {
                 .getResponse()
                 .getContentAsString();
         String evaluationId = objectMapper.readTree(evaluationJson).get("evaluationId").stringValue();
+        var event = outboxRepository.claimPending(100, Instant.now().plusSeconds(60)).stream()
+                .filter(message -> message.eventId().equals(evaluationId))
+                .findFirst()
+                .orElseThrow();
+        org.junit.jupiter.api.Assertions.assertEquals("ACC-HISTORY-1", event.accountId());
+        org.junit.jupiter.api.Assertions.assertTrue(event.payload().contains(evaluationId));
+
         String authorization = basicAuthHeader("test-admin", "test-password");
 
         mockMvc.perform(get("/api/v1/fraud/transactions/TX-HISTORY-1/evaluations")
@@ -249,6 +263,104 @@ class FraudEvaluationControllerTest {
     }
 
     @Test
+    @DisplayName("POST /api/v1/fraud/evaluate: Rejects oversized identifiers")
+    void shouldRejectOversizedTransactionIdentifier() throws Exception {
+        String request = objectMapper.writeValueAsString(Map.of(
+                "transactionId", "T".repeat(256),
+                "accountId", "ACC-USER-1",
+                "amount", 100.00
+        ));
+
+        mockMvc.perform(post("/api/v1/fraud/evaluate")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(request))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.details", hasItem(
+                        containsString("transactionId must be at most 255 characters"))));
+    }
+
+    @Test
+    @DisplayName("POST /api/v1/fraud/evaluate: Rejects oversized metadata")
+    void shouldRejectOversizedMetadata() throws Exception {
+        Map<String, String> metadata = new HashMap<>();
+        for (int i = 0; i < 21; i++) {
+            metadata.put("key" + i, "value");
+        }
+        String request = objectMapper.writeValueAsString(Map.of(
+                "transactionId", "TX-METADATA-1",
+                "accountId", "ACC-USER-1",
+                "amount", 100.00,
+                "metadata", metadata
+        ));
+
+        mockMvc.perform(post("/api/v1/fraud/evaluate")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(request))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.details", hasItem(
+                        containsString("metadata must contain at most 20 entries"))));
+    }
+
+    @Test
+    @DisplayName("POST /api/v1/fraud/evaluate: Rejects oversized metadata keys and values")
+    void shouldRejectOversizedMetadataKeyAndValue() throws Exception {
+        for (Map<String, String> metadata : List.of(
+                Map.of("K".repeat(65), "value"),
+                Map.of("key", "V".repeat(257))
+        )) {
+            String request = objectMapper.writeValueAsString(Map.of(
+                    "transactionId", "TX-METADATA-2",
+                    "accountId", "ACC-USER-1",
+                    "amount", 100.00,
+                    "metadata", metadata
+            ));
+
+            mockMvc.perform(post("/api/v1/fraud/evaluate")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(request))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.details", hasItem(
+                            containsString("size must be between 0 and"))));
+        }
+    }
+
+    @Test
+    @DisplayName("POST /api/v1/fraud/blacklist: Rejects oversized values")
+    void shouldRejectOversizedBlacklistValue() throws Exception {
+        BlacklistEntityRequestDto request = new BlacklistEntityRequestDto(
+                "A".repeat(256),
+                BlacklistEntityRequestDto.BlacklistType.ACCOUNT,
+                null
+        );
+
+        mockMvc.perform(post("/api/v1/fraud/blacklist")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request))
+                        .header("Authorization", basicAuthHeader("test-admin", "test-password")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.details", hasItem(
+                        containsString("value must be at most 255 characters"))));
+    }
+
+    @Test
+    @DisplayName("POST /api/v1/fraud/blacklist: Rejects oversized reason")
+    void shouldRejectOversizedBlacklistReason() throws Exception {
+        BlacklistEntityRequestDto request = new BlacklistEntityRequestDto(
+                "ACC-USER-1",
+                BlacklistEntityRequestDto.BlacklistType.ACCOUNT,
+                "R".repeat(513)
+        );
+
+        mockMvc.perform(post("/api/v1/fraud/blacklist")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request))
+                        .header("Authorization", basicAuthHeader("test-admin", "test-password")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.details", hasItem(
+                        containsString("reason must be at most 512 characters"))));
+    }
+
+    @Test
     @DisplayName("POST /api/v1/fraud/blacklist and evaluate: Blocks blacklisted account")
     void shouldBlockBlacklistedAccount() throws Exception {
         String blacklistedAccountId = "ACC-MALICIOUS-99";
@@ -330,5 +442,27 @@ class FraudEvaluationControllerTest {
         mockMvc.perform(get("/api/v1/fraud/health"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("UP"));
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/fraud/evaluations/{id}: Non-existent evaluation returns 404 Not Found")
+    void shouldReturnNotFoundForMissingEvaluation() throws Exception {
+        mockMvc.perform(get("/api/v1/fraud/evaluations/NON-EXISTENT-EVAL-ID")
+                        .header("Authorization", basicAuthHeader("test-admin", "test-password")))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.status").value(404))
+                .andExpect(jsonPath("$.error").value("Not Found"))
+                .andExpect(jsonPath("$.message").value("Evaluation not found"));
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/fraud/transactions/{id}: Non-existent transaction returns 404 Not Found")
+    void shouldReturnNotFoundForMissingTransaction() throws Exception {
+        mockMvc.perform(get("/api/v1/fraud/transactions/NON-EXISTENT-TX-ID")
+                        .header("Authorization", basicAuthHeader("test-admin", "test-password")))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.status").value(404))
+                .andExpect(jsonPath("$.error").value("Not Found"))
+                .andExpect(jsonPath("$.message").value("Transaction not found"));
     }
 }

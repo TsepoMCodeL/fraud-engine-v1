@@ -105,7 +105,7 @@ class FraudEngineTest {
                 .accountId(accountId)
                 .amount(45.00)
                 .deviceId("DEVICE-1")
-                .location(new GeoLocation(40.7128, -74.0060, "US"))
+                .location(new GeoLocation(40.7128, -74.0060, "ZA"))
                 .build();
 
         FraudDecision decision = engine.evaluate(tx, profile);

@@ -20,21 +20,32 @@ flowchart LR
     App[Fraud Engine API and evaluation service]
     Redis[(Redis)]
     DB[(PostgreSQL)]
-    Grafana[Grafana dashboard]
+    Kafka[(Kafka)]
+    Consumers[Downstream event consumers]
+    K6[k6 load-test runner]
+    Grafana[Grafana dashboards]
     Prometheus[Prometheus scraper]
 
     Client -->|POST evaluate| App
     Admin -->|Blacklist and history API| App
     App <-->|Velocity and blacklist state| Redis
     App -->|Persist evaluations and read history| DB
-    Grafana -->|Read evaluation history| DB
+    App -->|Transactional outbox| DB
+    App -->|Retrying event publisher| Kafka
+    Kafka --> Consumers
+    Grafana -->|Transaction dashboard queries| DB
     Prometheus -->|GET /actuator/prometheus| App
+    K6 -->|Evaluation requests| App
+    K6 -->|Remote-write test metrics| Prometheus
+    Grafana -->|Load-test dashboard queries| Prometheus
 ```
 
-The Docker Compose deployment runs the application, Redis, PostgreSQL, and
-Grafana. Grafana queries PostgreSQL directly; the transaction dashboard does
-not depend on Prometheus. Prometheus scrapes the application separately for
-application metrics.
+The Docker Compose deployment runs the application, Redis, PostgreSQL, Kafka,
+Prometheus, and Grafana. A one-shot k6 runner is available through the
+`loadtest` profile. Grafana queries PostgreSQL directly for the transaction
+dashboard and Prometheus for the load-test dashboard. Prometheus also scrapes
+the application for HTTP metrics; k6 sends its run metrics to Prometheus using
+the remote-write receiver.
 
 ## 3. Application structure
 
@@ -48,11 +59,14 @@ The code is organized as a modular monolith:
 | `rules` | Stateless checks for blacklists, velocity, geographic anomalies, amount anomalies, and device trust. |
 | `decision` | Aggregates triggered rule scores and maps scores or hard overrides to a decision. |
 | `enrichment` | Contract for external context and the Redis implementation used in production. |
-| `persistence` | Repository interface, JDBC implementation, and classpath SQL query loading. |
-| `config` | Spring bean wiring, engine properties, PostgreSQL migration startup, OpenAPI, and HTTP Basic security. |
+| `events` | Versioned evaluation-completed event contract and scheduled Kafka outbox publisher. |
+| `persistence` | Evaluation history and outbox repositories, transactional persistence service, and classpath SQL query loading. |
+| `config` | Spring bean wiring, engine/Kafka properties, PostgreSQL migration startup, OpenAPI, and HTTP Basic security. |
 
-There is no separate worker, message broker, or asynchronous evaluation path
-in the current application.
+The decision path is synchronous. A background publisher sends committed
+evaluation events from the PostgreSQL outbox to Kafka; downstream consumers
+can process follow-up work asynchronously. No Kafka consumer is included in
+this application.
 
 ## 4. Transaction evaluation flow
 
@@ -66,6 +80,8 @@ sequenceDiagram
     participant Rules as Ordered fraud rules
     participant D as ThresholdDecisionEngine
     participant DB as PostgreSQL
+    participant K as Kafka
+    participant P as Outbox publisher
 
     C->>API: POST /api/v1/fraud/evaluate
     API->>S: Validated request DTO
@@ -81,10 +97,21 @@ sequenceDiagram
         E->>R: Record transaction for future velocity checks
     end
     E-->>S: Fraud decision
-    S->>DB: Persist transaction and evaluation
+    S->>DB: Persist evaluation and event in one transaction
+    DB-->>S: Commit
     S-->>API: Evaluation response
     API-->>C: 200 response
+    P->>DB: Claim pending outbox rows
+    P->>K: Publish event (keyed by account ID)
+    P->>DB: Mark sent or schedule retry
 ```
+
+If Kafka is unavailable, evaluation persistence and the synchronous response
+continue as long as PostgreSQL and Redis are available. Pending outbox rows
+remain durable and are retried with bounded exponential backoff. Publishing is
+at least once: a crash after broker acknowledgement but before the database
+marks the row published may produce a duplicate. Consumers should deduplicate
+by the stable `eventId` (the evaluation ID).
 
 The request DTO requires transaction ID, account ID, and a positive amount.
 Currency defaults to `ZAR` and timestamp defaults to the current time if not
@@ -147,6 +174,20 @@ startup. Runtime SQL is kept separately in
 history APIs page results, with newest records first and a maximum page size of
 100.
 
+The `fraud_event_outbox` table stores a versioned
+`FraudEvaluationCompletedEvent` payload and its delivery state. Evaluation and
+outbox insertion share the same database transaction, preventing committed
+decisions from being lost between database persistence and event publication.
+The publisher claims rows in a short `FOR UPDATE SKIP LOCKED` transaction and
+sets a lease before contacting Kafka, so database locks are not held during
+network waits. It sends each claimed batch concurrently, then marks successful
+deliveries or schedules failed sends for retry. Expired leases make claims
+recoverable after a process crash. Publishing remains at least once; strict
+ordering across multiple application instances is not guaranteed. The outbox
+stores the account ID as the Kafka record key to group events by account
+partition. Successfully delivered rows are retained for seven days by default
+and purged daily.
+
 ## 6. HTTP API and security
 
 The REST API is rooted at `/api/v1/fraud`:
@@ -170,32 +211,33 @@ at application startup.
 
 ## 7. Runtime, configuration, and observability
 
-The application listens on port `8080` and uses Spring Boot Actuator with
-Prometheus metrics. Actuator web exposure is configured for health and
-Prometheus endpoints; the Prometheus scrape endpoint requires admin
-authentication. Structured rule outcomes are returned in evaluation summaries,
-and the default audit listener logs the evaluation ID, transaction/account
-identifiers, action, score, rule count, and latency.
+The application listens on port `8080` and runs in the Compose container as
+non-root UID/GID `10001`. Spring Boot Actuator exposes health and Prometheus
+metrics; the Prometheus scrape endpoint requires admin authentication. HTTP
+request histograms support application latency dashboards. Evaluation
+summaries include rule outcomes, while the audit listener logs the evaluation
+ID, transaction/account identifiers, decision, score, rule count, and latency.
 
-The principal settings are under `fraud.engine` in
-`src/main/resources/application.yml`:
+Runtime settings are defined in `src/main/resources/application.yml` and
+overridden through environment variables. They cover decision thresholds,
+Redis velocity state, database and broker connections, admin credentials, and
+outbox delivery. See the README and `.env.example` for local setup and
+environment-variable instructions.
 
-| Setting | Default | Effect |
-| --- | --- | --- |
-| `redis-key-prefix` | `fraud:` | Namespace for Redis keys. |
-| `velocity-ttl-hours` | `48` | TTL set on account velocity keys. |
-| `review-threshold` | `40` | Minimum aggregate score for review. |
-| `decline-threshold` | `75` | Minimum aggregate score for decline. |
-| `honor-hard-overrides` | `true` | Enables hard-block declines. |
-| `short-circuit-enabled` | `true` | Stops at a triggered short-circuit decline. |
-| `auto-record-transactions` | `true` | Records approved transactions in Redis velocity state. |
-| `fail-open-on-fatal-error` | `false` | Selects approve versus decline for fatal engine errors. |
-| `max-future-timestamp-skew` | `5m` | Maximum accepted future transaction timestamp. |
+Compose uses service discovery for PostgreSQL, Redis, and Kafka, and retains
+PostgreSQL, Kafka, Prometheus, and Grafana data in named volumes. Kafka's
+internal listener is `kafka:29092`; its plaintext host listener is bound to
+`localhost:9092` for local development. Production deployments should
+configure broker authentication, encryption, and network access controls.
+Prometheus's remote-write receiver is intended for local development and
+should not be exposed to untrusted networks.
 
-Database, Redis, admin, and Grafana credentials are supplied through
-environment configuration. The Compose stack uses service discovery for the
-application's PostgreSQL and Redis connections and persists PostgreSQL and
-Grafana data in named volumes.
+The outbox publisher polls batches in the background, retries failures with
+bounded backoff, and purges delivered rows after the configured retention
+period. Its lease accounts for producer send blocking and the publish timeout.
+The topic, batch, timeout, lease, and retention values are configurable under
+`fraud.kafka`; their defaults and environment-variable names are documented in
+`application.yml` and the README.
 
 ## 8. Extension points and constraints
 
@@ -208,6 +250,9 @@ Grafana data in named volumes.
 - Additional audit listeners can implement `FraudAuditListener`. The listener
   contract expects non-blocking or asynchronous handling, but the current
   logging listener executes inline.
+- Downstream systems can subscribe to the versioned Kafka completion topic;
+  consumers should handle duplicate event IDs and tolerate event delivery
+  delays.
 - Persistent evaluation history is coupled to the PostgreSQL schema and JSON
   serialization stored by the JDBC repository. Changes to stored payloads or
   schema should preserve compatibility with existing rows or include an

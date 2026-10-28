@@ -7,6 +7,10 @@ management:
     web:
       exposure:
         include: health,prometheus
+  metrics:
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
 
 springdoc:
   show-actuator: true
@@ -20,6 +24,12 @@ spring:
     url: jdbc:postgresql://${DB_HOST:postgres}:${DB_PORT:5432}/${POSTGRES_DB:fraudengine}
     username: ${POSTGRES_USER:}
     password: ${POSTGRES_PASSWORD:}
+    hikari:
+      maximum-pool-size: 25
+      minimum-idle: 10
+      connection-timeout: 3000
+      idle-timeout: 60000
+      max-lifetime: 1800000
   data:
     redis:
       host: ${REDIS_HOST:redis}
@@ -32,6 +42,15 @@ spring:
           max-active: 32
           max-idle: 16
           min-idle: 4
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      acks: all
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      properties:
+        enable.idempotence: true
+        max.block.ms: ${FRAUD_KAFKA_PRODUCER_MAX_BLOCK_MS:5000}
 
 # Fraud Engine Custom Configuration
 fraud:
@@ -48,6 +67,16 @@ fraud:
     admin:
       username: ${FRAUD_ADMIN_USERNAME:}
       password: ${FRAUD_ADMIN_PASSWORD:}
+  kafka:
+    topic: ${FRAUD_KAFKA_TOPIC:fraud.evaluation.completed.v1}
+    outbox-batch-size: 50
+    outbox-poll-interval-ms: 1000
+    outbox-cleanup-cron: "0 0 2 * * *"
+    outbox-retention-days: 7
+    publish-timeout: 10s
+    outbox-claim-lease: 30s
+    producer-send-block-timeout: ${FRAUD_KAFKA_PRODUCER_MAX_BLOCK_MS:5000}ms
+    publisher-enabled: true
 
 logging:
   level:

@@ -3,7 +3,6 @@ package fraudengine.enrichment;
 import fraudengine.domain.CustomerProfile;
 import fraudengine.domain.EnrichedContext;
 import fraudengine.domain.Transaction;
-import tools.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataAccessException;
@@ -11,6 +10,9 @@ import org.springframework.data.redis.connection.RedisConnection;
 import org.springframework.data.redis.core.RedisCallback;
 import org.springframework.data.redis.core.RedisOperations;
 import org.springframework.data.redis.core.SessionCallback;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectReader;
+import tools.jackson.databind.ObjectWriter;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -24,7 +26,7 @@ import java.util.Set;
  * Enterprise Redis implementation of ContextEnricher.
  * Uses Redis Sorted Sets (ZSET) for sliding-window velocity tracking and
  * Redis Sets (SET) for blacklist queries.
- * Enrichment retrieves only the latest transaction instead of loading account history.
+ * Enrichment is read-only; pruning occurs during transaction recording.
  */
 public class RedisContextEnricher implements ContextEnricher {
 
@@ -38,8 +40,10 @@ public class RedisContextEnricher implements ContextEnricher {
     private static final String BLACKLIST_ACCOUNTS_KEY = "blacklist:accounts";
     private static final String BLACKLIST_IPS_KEY = "blacklist:ips";
     private static final String BLACKLIST_DEVICES_KEY = "blacklist:devices";
+
     private final RedisOperations<String, String> redisOperations;
-    private final ObjectMapper objectMapper;
+    private final ObjectWriter transactionWriter;
+    private final ObjectReader transactionReader;
     private final String keyPrefix;
     private final Duration velocityTtl;
 
@@ -53,11 +57,9 @@ public class RedisContextEnricher implements ContextEnricher {
         this.keyPrefix = (keyPrefix != null && !keyPrefix.isBlank()) ? keyPrefix : DEFAULT_KEY_PREFIX;
         this.velocityTtl = velocityTtl != null ? velocityTtl : DEFAULT_VELOCITY_TTL;
 
-        if (objectMapper != null) {
-            this.objectMapper = objectMapper;
-        } else {
-            this.objectMapper = new ObjectMapper();
-        }
+        ObjectMapper mapper = objectMapper != null ? objectMapper : new ObjectMapper();
+        this.transactionWriter = mapper.writerFor(Transaction.class);
+        this.transactionReader = mapper.readerFor(Transaction.class);
     }
 
     public RedisContextEnricher(RedisOperations<String, String> redisOperations) {
@@ -89,48 +91,45 @@ public class RedisContextEnricher implements ContextEnricher {
             double cutoff10mMs = now.minus(TEN_MINUTES).toEpochMilli();
             double cutoff24hMs = now.minus(ONE_DAY).toEpochMilli();
             double eventTimeMs = now.toEpochMilli();
-            // Fetch counts, the latest transaction, and blacklist matches in one pipeline.
+
+            // Pure read-only pipeline: fetch counts, the latest transaction, and blacklist matches.
             List<Object> pipelineResults = redisOperations.executePipelined(new SessionCallback<>() {
                 @Override
+                @SuppressWarnings("unchecked")
                 public <K, V> Object execute(RedisOperations<K, V> operations) throws DataAccessException {
-                    // 1. Prune expired entries older than 24 hours
-                    RedisContextEnricher.this.redisOperations.opsForZSet()
-                            .removeRangeByScore(vKey, Double.NEGATIVE_INFINITY, cutoff24hMs);
+                    var zOps = (org.springframework.data.redis.core.ZSetOperations<String, String>) operations.opsForZSet();
+                    var sOps = (org.springframework.data.redis.core.SetOperations<String, String>) operations.opsForSet();
 
-                    // 2. Count transactions in last 1 minute
-                    RedisContextEnricher.this.redisOperations.opsForZSet().count(vKey, cutoff1mMs, eventTimeMs);
+                    // 1. Count transactions in last 1 minute
+                    zOps.count(vKey, cutoff1mMs, eventTimeMs);
 
-                    // 3. Count transactions in last 10 minutes
-                    RedisContextEnricher.this.redisOperations.opsForZSet().count(vKey, cutoff10mMs, eventTimeMs);
+                    // 2. Count transactions in last 10 minutes
+                    zOps.count(vKey, cutoff10mMs, eventTimeMs);
 
-                    // 4. Count transactions in last 24 hours
-                    RedisContextEnricher.this.redisOperations.opsForZSet().count(vKey, cutoff24hMs, eventTimeMs);
+                    // 3. Count transactions in last 24 hours
+                    zOps.count(vKey, cutoff24hMs, eventTimeMs);
 
-                    // 5. Fetch only the latest transaction needed by velocity rules
-                    RedisContextEnricher.this.redisOperations.opsForZSet().reverseRangeByScore(
-                            vKey, cutoff24hMs, eventTimeMs, 0, 1);
+                    // 4. Fetch only the latest transaction needed by velocity rules
+                    zOps.reverseRangeByScore(vKey, cutoff24hMs, eventTimeMs, 0, 1);
 
-                    // 6. Check account blacklist
-                    RedisContextEnricher.this.redisOperations.opsForSet()
-                            .isMember(blacklistAccountsKey(), transaction.accountId());
+                    // 5. Check account blacklist
+                    sOps.isMember(blacklistAccountsKey(), transaction.accountId());
 
-                    // 7. Check IP blacklist
+                    // 6. Check IP blacklist
                     if (transaction.ipAddress() != null) {
-                        RedisContextEnricher.this.redisOperations.opsForSet()
-                                .isMember(blacklistIpsKey(), transaction.ipAddress());
+                        sOps.isMember(blacklistIpsKey(), transaction.ipAddress());
                     }
 
-                    // 8. Check Device blacklist
+                    // 7. Check Device blacklist
                     if (transaction.deviceId() != null) {
-                        RedisContextEnricher.this.redisOperations.opsForSet()
-                                .isMember(blacklistDevicesKey(), transaction.deviceId());
+                        sOps.isMember(blacklistDevicesKey(), transaction.deviceId());
                     }
 
                     return null;
                 }
             });
 
-            int expectedResultCount = 6
+            int expectedResultCount = 5
                     + (transaction.ipAddress() == null ? 0 : 1)
                     + (transaction.deviceId() == null ? 0 : 1);
             if (pipelineResults == null || pipelineResults.size() != expectedResultCount) {
@@ -138,18 +137,18 @@ public class RedisContextEnricher implements ContextEnricher {
             }
 
             // Parse pipeline response objects
-            int count1m = toInt(pipelineResults.get(1));
-            int count10m = toInt(pipelineResults.get(2));
-            int count24h = toInt(pipelineResults.get(3));
+            int count1m = toInt(pipelineResults.get(0));
+            int count10m = toInt(pipelineResults.get(1));
+            int count24h = toInt(pipelineResults.get(2));
 
             Optional<Transaction> lastTx = Optional.empty();
 
-            Object latestTransactions = pipelineResults.get(4);
+            Object latestTransactions = pipelineResults.get(3);
             if (latestTransactions instanceof Set<?> transactions && !transactions.isEmpty()) {
                 Object latestTransaction = transactions.iterator().next();
                 if (latestTransaction instanceof String transactionJson) {
                     try {
-                        lastTx = Optional.of(objectMapper.readValue(transactionJson, Transaction.class));
+                        lastTx = Optional.of(transactionReader.readValue(transactionJson));
                     } catch (Exception ex) {
                         throw new IllegalStateException("Redis returned an invalid transaction record", ex);
                     }
@@ -158,8 +157,8 @@ public class RedisContextEnricher implements ContextEnricher {
                 }
             }
 
-            boolean isAccountBlacklisted = toBoolean(pipelineResults.get(5));
-            int nextIdx = 6;
+            boolean isAccountBlacklisted = toBoolean(pipelineResults.get(4));
+            int nextIdx = 5;
             boolean isIpBlacklisted = false;
             if (transaction.ipAddress() != null) {
                 isIpBlacklisted = toBoolean(pipelineResults.get(nextIdx++));
@@ -205,14 +204,20 @@ public class RedisContextEnricher implements ContextEnricher {
     public void recordTransaction(Transaction transaction) {
         try {
             String vKey = velocityKey(transaction.accountId());
-            String json = objectMapper.writeValueAsString(transaction);
+            String json = transactionWriter.writeValueAsString(transaction);
             double score = transaction.timestamp().toEpochMilli();
+            double cutoff24hMs = transaction.timestamp().minus(ONE_DAY).toEpochMilli();
 
             redisOperations.executePipelined(new SessionCallback<>() {
                 @Override
+                @SuppressWarnings("unchecked")
                 public <K, V> Object execute(RedisOperations<K, V> operations) throws DataAccessException {
-                    RedisContextEnricher.this.redisOperations.opsForZSet().add(vKey, json, score);
-                    RedisContextEnricher.this.redisOperations.expire(vKey, velocityTtl);
+                    var zOps = (org.springframework.data.redis.core.ZSetOperations<String, String>) operations.opsForZSet();
+                    var redis = (RedisOperations<String, String>) operations;
+                    // Prune expired entries older than 24 hours during recording
+                    zOps.removeRangeByScore(vKey, Double.NEGATIVE_INFINITY, cutoff24hMs);
+                    zOps.add(vKey, json, score);
+                    redis.expire(vKey, velocityTtl);
                     return null;
                 }
             });
@@ -275,5 +280,4 @@ public class RedisContextEnricher implements ContextEnricher {
         }
         throw new IllegalStateException("Redis returned an invalid blacklist result");
     }
-
 }

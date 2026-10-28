@@ -13,6 +13,7 @@ import fraudengine.domain.Transaction;
 import fraudengine.engine.DefaultFraudEngine;
 import fraudengine.engine.FraudEngine;
 import fraudengine.enrichment.ContextEnricher;
+import fraudengine.persistence.FraudEvaluationPersistenceService;
 import fraudengine.persistence.FraudEvaluationRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -28,17 +29,20 @@ public class FraudEvaluationService {
     private final ContextEnricher contextEnricher;
     private final FraudEngineProperties properties;
     private final FraudEvaluationRepository evaluationRepository;
+    private final FraudEvaluationPersistenceService evaluationPersistenceService;
 
     public FraudEvaluationService(
             FraudEngine fraudEngine,
             ContextEnricher contextEnricher,
             FraudEngineProperties properties,
-            FraudEvaluationRepository evaluationRepository
+            FraudEvaluationRepository evaluationRepository,
+            FraudEvaluationPersistenceService evaluationPersistenceService
     ) {
         this.fraudEngine = fraudEngine;
         this.contextEnricher = contextEnricher;
         this.properties = properties;
         this.evaluationRepository = evaluationRepository;
+        this.evaluationPersistenceService = evaluationPersistenceService;
     }
 
     public EvaluateTransactionResponseDto evaluate(EvaluateTransactionRequestDto request) {
@@ -55,7 +59,7 @@ public class FraudEvaluationService {
         Transaction transaction = request.toDomain();
         FraudDecision decision = fraudEngine.evaluate(transaction);
         EvaluateTransactionResponseDto response = EvaluateTransactionResponseDto.fromDomain(decision);
-        evaluationRepository.save(transaction, response);
+        evaluationPersistenceService.save(transaction, response);
 
         return response;
     }
