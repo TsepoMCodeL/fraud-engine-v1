@@ -21,6 +21,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Objects;
 
 @Service
 public class FraudEvaluationService {
@@ -38,14 +39,18 @@ public class FraudEvaluationService {
             FraudEvaluationRepository evaluationRepository,
             FraudEvaluationPersistenceService evaluationPersistenceService
     ) {
-        this.fraudEngine = fraudEngine;
-        this.contextEnricher = contextEnricher;
-        this.properties = properties;
-        this.evaluationRepository = evaluationRepository;
-        this.evaluationPersistenceService = evaluationPersistenceService;
+        this.fraudEngine = Objects.requireNonNull(fraudEngine, "fraudEngine cannot be null");
+        this.contextEnricher = Objects.requireNonNull(contextEnricher, "contextEnricher cannot be null");
+        this.properties = Objects.requireNonNull(properties, "properties cannot be null");
+        this.evaluationRepository = Objects.requireNonNull(evaluationRepository, "evaluationRepository cannot be null");
+        this.evaluationPersistenceService = Objects.requireNonNull(
+                evaluationPersistenceService,
+                "evaluationPersistenceService cannot be null"
+        );
     }
 
     public EvaluateTransactionResponseDto evaluate(EvaluateTransactionRequestDto request) {
+        Objects.requireNonNull(request, "request cannot be null");
         if (request.customerProfile() != null) {
             throw new IllegalArgumentException(
                     "customerProfile cannot be supplied by clients; use a trusted server-side profile source");
@@ -103,6 +108,7 @@ public class FraudEvaluationService {
     }
 
     public void addBlacklist(BlacklistEntityRequestDto request) {
+        Objects.requireNonNull(request, "request cannot be null");
         switch (request.type()) {
             case ACCOUNT -> contextEnricher.addBlacklistedAccount(request.value());
             case IP -> contextEnricher.addBlacklistedIp(request.value());

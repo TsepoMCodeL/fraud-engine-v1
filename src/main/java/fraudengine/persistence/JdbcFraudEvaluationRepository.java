@@ -15,8 +15,10 @@ import tools.jackson.databind.ObjectWriter;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Timestamp;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 
 @Repository
@@ -36,12 +38,13 @@ public class JdbcFraudEvaluationRepository implements FraudEvaluationRepository 
             ObjectMapper objectMapper,
             FraudEvaluationSql sql
     ) {
-        this.jdbcClient = jdbcClient;
-        this.sql = sql;
-        this.transactionWriter = objectMapper.writerFor(Transaction.class);
-        this.evaluationWriter = objectMapper.writerFor(EvaluateTransactionResponseDto.class);
-        this.transactionReader = objectMapper.readerFor(Transaction.class);
-        this.evaluationReader = objectMapper.readerFor(EvaluateTransactionResponseDto.class);
+        this.jdbcClient = Objects.requireNonNull(jdbcClient, "jdbcClient cannot be null");
+        this.sql = Objects.requireNonNull(sql, "sql cannot be null");
+        ObjectMapper mapper = Objects.requireNonNull(objectMapper, "objectMapper cannot be null");
+        this.transactionWriter = mapper.writerFor(Transaction.class);
+        this.evaluationWriter = mapper.writerFor(EvaluateTransactionResponseDto.class);
+        this.transactionReader = mapper.readerFor(Transaction.class);
+        this.evaluationReader = mapper.readerFor(EvaluateTransactionResponseDto.class);
     }
 
     @Override
@@ -61,8 +64,8 @@ public class JdbcFraudEvaluationRepository implements FraudEvaluationRepository 
                     .param("evaluationId", evaluation.evaluationId())
                     .param("transactionId", transaction.id())
                     .param("accountId", transaction.accountId())
-                    .param("eventTimestamp", Timestamp.from(transaction.timestamp()))
-                    .param("evaluatedAt", Timestamp.from(evaluation.evaluatedAt()))
+                    .param("eventTimestamp", OffsetDateTime.ofInstant(transaction.timestamp(), ZoneOffset.UTC))
+                    .param("evaluatedAt", OffsetDateTime.ofInstant(evaluation.evaluatedAt(), ZoneOffset.UTC))
                     .param("action", evaluation.action().name())
                     .param("riskLevel", evaluation.riskLevel().name())
                     .param("riskScore", evaluation.riskScore())

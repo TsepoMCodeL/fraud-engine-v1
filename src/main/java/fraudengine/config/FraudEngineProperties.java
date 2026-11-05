@@ -1,15 +1,20 @@
 package fraudengine.config;
 
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.validation.annotation.Validated;
 
 import java.time.Duration;
 
+@Validated
 @ConfigurationProperties(prefix = "fraud.engine")
 public class FraudEngineProperties {
 
     /**
      * Key prefix for all Redis keys stored by the fraud engine.
      */
+    @NotBlank(message = "redisKeyPrefix must not be blank")
     private String redisKeyPrefix = "fraud:";
 
     /**
@@ -47,6 +52,7 @@ public class FraudEngineProperties {
      */
     private boolean failOpenOnFatalError = false;
 
+    @NotNull(message = "maxFutureTimestampSkew must not be null")
     private Duration maxFutureTimestampSkew = Duration.ofMinutes(5);
 
     // Getters & Setters

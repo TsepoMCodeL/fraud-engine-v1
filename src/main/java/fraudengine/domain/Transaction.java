@@ -1,26 +1,31 @@
 package fraudengine.domain;
 
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
+
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 
 /**
  * Immutable transaction event submitted to the fraud engine for evaluation.
  */
+@NullMarked
 public record Transaction(
         String id,
         String accountId,
         BigDecimal amount,
         String currency,
         Instant timestamp,
-        String merchantId,
-        String merchantCategoryCode,
-        String ipAddress,
-        GeoLocation location,
-        String deviceId,
-        Map<String, String> metadata
+        @Nullable String merchantId,
+        @Nullable String merchantCategoryCode,
+        @Nullable String ipAddress,
+        @Nullable GeoLocation location,
+        @Nullable String deviceId,
+        @Nullable Map<String, String> metadata
 ) {
     public Transaction {
         Objects.requireNonNull(id, "id cannot be null");
@@ -33,7 +38,9 @@ public record Transaction(
             throw new IllegalArgumentException("Transaction amount cannot be negative");
         }
 
-        metadata = metadata == null ? Collections.emptyMap() : Collections.unmodifiableMap(metadata);
+        metadata = metadata == null || metadata.isEmpty()
+                ? Map.of()
+                : Collections.unmodifiableMap(new LinkedHashMap<>(metadata));
     }
 
     public static Builder builder() {
@@ -62,13 +69,24 @@ public record Transaction(
         public Builder merchantId(String merchantId) { this.merchantId = merchantId; return this; }
         public Builder merchantCategoryCode(String mcc) { this.merchantCategoryCode = mcc; return this; }
         public Builder ipAddress(String ipAddress) { this.ipAddress = ipAddress; return this; }
-        public Builder location(GeoLocation location) { this.location = location; return this; }
+        public Builder location(@Nullable GeoLocation location) { this.location = location; return this; }
         public Builder deviceId(String deviceId) { this.deviceId = deviceId; return this; }
-        public Builder metadata(Map<String, String> metadata) { this.metadata = metadata; return this; }
+        public Builder metadata(@Nullable Map<String, String> metadata) { this.metadata = metadata; return this; }
 
         public Transaction build() {
-            return new Transaction(id, accountId, amount, currency, timestamp,
-                    merchantId, merchantCategoryCode, ipAddress, location, deviceId, metadata);
+            return new Transaction(
+                    id,
+                    accountId,
+                    amount,
+                    currency,
+                    timestamp,
+                    merchantId,
+                    merchantCategoryCode,
+                    ipAddress,
+                    location,
+                    deviceId,
+                    metadata
+            );
         }
     }
 }

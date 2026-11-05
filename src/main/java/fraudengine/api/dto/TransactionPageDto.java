@@ -11,4 +11,7 @@ public record TransactionPageDto(
         long totalElements,
         int totalPages
 ) {
+    public TransactionPageDto {
+        content = List.copyOf(content);
+    }
 }

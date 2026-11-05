@@ -1,6 +1,8 @@
 package fraudengine.api;
 
+import fraudengine.api.dto.ErrorResponseDto;
 import jakarta.servlet.http.HttpServletRequest;
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -10,12 +12,13 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
-
-import fraudengine.api.dto.ErrorResponseDto;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
+import java.util.Objects;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -29,7 +32,8 @@ public class GlobalExceptionHandler {
     ) {
         List<String> errors = new ArrayList<>();
         for (FieldError fieldError : ex.getBindingResult().getFieldErrors()) {
-            errors.add(fieldError.getField() + ": " + fieldError.getDefaultMessage());
+            errors.add(fieldError.getField() + ": "
+                    + Objects.requireNonNullElse(fieldError.getDefaultMessage(), "Invalid value"));
         }
 
         ErrorResponseDto response = ErrorResponseDto.of(
@@ -51,7 +55,34 @@ public class GlobalExceptionHandler {
         ErrorResponseDto response = ErrorResponseDto.of(
                 HttpStatus.BAD_REQUEST.value(),
                 HttpStatus.BAD_REQUEST.getReasonPhrase(),
-                "Malformed JSON request body: " + ex.getMostSpecificCause().getMessage(),
+                "Malformed JSON request body: " + Objects.requireNonNullElse(
+                        ex.getMostSpecificCause().getMessage(),
+                        "Invalid request body"
+                ),
+                List.of(),
+                request.getRequestURI()
+        );
+
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+    }
+
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ErrorResponseDto> handleMethodArgumentTypeMismatch(
+            MethodArgumentTypeMismatchException ex,
+            HttpServletRequest request
+    ) {
+        String parameterName = ex.getName();
+        Object value = ex.getValue();
+        Class<?> requiredType = ex.getRequiredType();
+        String typeName = requiredType != null ? requiredType.getSimpleName() : "expected type";
+        String message = String.format(Locale.ROOT,
+                "Parameter '%s' with value '%s' could not be converted to %s",
+                parameterName, value, typeName);
+
+        ErrorResponseDto response = ErrorResponseDto.of(
+                HttpStatus.BAD_REQUEST.value(),
+                HttpStatus.BAD_REQUEST.getReasonPhrase(),
+                message,
                 List.of(),
                 request.getRequestURI()
         );
@@ -67,7 +98,7 @@ public class GlobalExceptionHandler {
         ErrorResponseDto response = ErrorResponseDto.of(
                 HttpStatus.BAD_REQUEST.value(),
                 HttpStatus.BAD_REQUEST.getReasonPhrase(),
-                ex.getMessage(),
+                Objects.requireNonNullElse(ex.getMessage(), "Invalid request"),
                 List.of(),
                 request.getRequestURI()
         );
@@ -80,9 +111,12 @@ public class GlobalExceptionHandler {
             ResponseStatusException ex,
             HttpServletRequest request
     ) {
-        HttpStatus status = HttpStatus.resolve(ex.getStatusCode().value());
+        @Nullable HttpStatus status = HttpStatus.resolve(ex.getStatusCode().value());
         String reasonPhrase = status != null ? status.getReasonPhrase() : "Error";
-        String message = ex.getReason() != null ? ex.getReason() : ex.getMessage();
+        String message = Objects.requireNonNullElse(
+                ex.getReason(),
+                Objects.requireNonNullElse(ex.getMessage(), reasonPhrase)
+        );
 
         ErrorResponseDto response = ErrorResponseDto.of(
                 ex.getStatusCode().value(),

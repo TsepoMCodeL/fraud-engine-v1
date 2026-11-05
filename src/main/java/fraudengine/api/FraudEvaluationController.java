@@ -25,6 +25,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 @RestController
 @RequestMapping("/api/v1/fraud")
@@ -35,8 +36,8 @@ public class FraudEvaluationController {
     private final ContextEnricher contextEnricher;
 
     public FraudEvaluationController(FraudEvaluationService evaluationService, ContextEnricher contextEnricher) {
-        this.evaluationService = evaluationService;
-        this.contextEnricher = contextEnricher;
+        this.evaluationService = Objects.requireNonNull(evaluationService, "evaluationService cannot be null");
+        this.contextEnricher = Objects.requireNonNull(contextEnricher, "contextEnricher cannot be null");
     }
 
     /**

@@ -6,6 +6,8 @@ import fraudengine.events.FraudEvaluationCompletedEvent;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Objects;
+
 @Service
 public class FraudEvaluationPersistenceService {
 
@@ -16,12 +18,17 @@ public class FraudEvaluationPersistenceService {
             FraudEvaluationRepository evaluationRepository,
             FraudEvaluationOutboxRepository outboxRepository
     ) {
-        this.evaluationRepository = evaluationRepository;
-        this.outboxRepository = outboxRepository;
+        this.evaluationRepository = Objects.requireNonNull(
+                evaluationRepository,
+                "evaluationRepository cannot be null"
+        );
+        this.outboxRepository = Objects.requireNonNull(outboxRepository, "outboxRepository cannot be null");
     }
 
     @Transactional
     public void save(Transaction transaction, EvaluateTransactionResponseDto evaluation) {
+        Objects.requireNonNull(transaction, "transaction cannot be null");
+        Objects.requireNonNull(evaluation, "evaluation cannot be null");
         evaluationRepository.save(transaction, evaluation);
         outboxRepository.enqueue(FraudEvaluationCompletedEvent.from(transaction, evaluation));
     }

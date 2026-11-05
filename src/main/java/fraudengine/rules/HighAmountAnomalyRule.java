@@ -2,6 +2,7 @@ package fraudengine.rules;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.Locale;
 import java.util.Map;
 
 import fraudengine.domain.Action;
@@ -48,7 +49,26 @@ public class HighAmountAnomalyRule extends AbstractFraudRule {
         BigDecimal avg = profile.averageTransactionAmount();
         BigDecimal amount = tx.amount();
 
-        // Check absolute hard threshold first
+        BigDecimal ratio = avg.compareTo(ZERO_AMOUNT) > 0
+                ? amount.divide(avg, RATIO_SCALE, RoundingMode.HALF_UP)
+                : null;
+
+        // 1. Critical baseline deviation check (highest risk score: 70)
+        if (ratio != null && ratio.compareTo(criticalMultiplier) >= 0) {
+            return RuleResult.triggered(
+                    id(),
+                    name(),
+                    category(),
+                    CRITICAL_MULTIPLIER_RISK_SCORE,
+                    Action.REVIEW,
+                    String.format(Locale.ROOT, "Transaction amount %s is %.1fx customer's average (%s)",
+                            amount, ratio.doubleValue(), avg),
+                    Map.of("amount", amount, "average", avg, "ratio", ratio.doubleValue()),
+                    System.nanoTime() - startNanos
+            );
+        }
+
+        // 2. Absolute high-value threshold check (risk score: 50, VIP exempt)
         if (amount.compareTo(absoluteThreshold) > 0 && !profile.isVip()) {
             return RuleResult.triggered(
                     id(),
@@ -56,42 +76,26 @@ public class HighAmountAnomalyRule extends AbstractFraudRule {
                     category(),
                     ABSOLUTE_THRESHOLD_RISK_SCORE,
                     Action.REVIEW,
-                    String.format("Transaction amount %s exceeds absolute high-value threshold %s",
+                    String.format(Locale.ROOT, "Transaction amount %s exceeds absolute high-value threshold %s",
                             amount, absoluteThreshold),
                     Map.of("amount", amount, "threshold", absoluteThreshold),
                     System.nanoTime() - startNanos
             );
         }
 
-        // Baseline deviation check
-        if (avg.compareTo(ZERO_AMOUNT) > 0) {
-            BigDecimal ratio = amount.divide(avg, RATIO_SCALE, RoundingMode.HALF_UP);
-
-            if (ratio.compareTo(criticalMultiplier) >= 0) {
-                return RuleResult.triggered(
-                        id(),
-                        name(),
-                        category(),
-                        CRITICAL_MULTIPLIER_RISK_SCORE,
-                        Action.REVIEW,
-                        String.format("Transaction amount %s is %.1fx customer's average (%s)",
-                                amount, ratio.doubleValue(), avg),
-                        Map.of("amount", amount, "average", avg, "ratio", ratio.doubleValue()),
-                        System.nanoTime() - startNanos
-                );
-            } else if (ratio.compareTo(reviewMultiplier) >= 0) {
-                return RuleResult.triggered(
-                        id(),
-                        name(),
-                        category(),
-                        REVIEW_MULTIPLIER_RISK_SCORE,
-                        Action.REVIEW,
-                        String.format("Unusual transaction amount %s is %.1fx customer's average (%s)",
-                                amount, ratio.doubleValue(), avg),
-                        Map.of("amount", amount, "average", avg, "ratio", ratio.doubleValue()),
-                        System.nanoTime() - startNanos
-                );
-            }
+        // 3. Moderate baseline deviation check (risk score: 35)
+        if (ratio != null && ratio.compareTo(reviewMultiplier) >= 0) {
+            return RuleResult.triggered(
+                    id(),
+                    name(),
+                    category(),
+                    REVIEW_MULTIPLIER_RISK_SCORE,
+                    Action.REVIEW,
+                    String.format(Locale.ROOT, "Unusual transaction amount %s is %.1fx customer's average (%s)",
+                            amount, ratio.doubleValue(), avg),
+                    Map.of("amount", amount, "average", avg, "ratio", ratio.doubleValue()),
+                    System.nanoTime() - startNanos
+            );
         }
 
         return RuleResult.passed(id(), name(), category(), System.nanoTime() - startNanos);

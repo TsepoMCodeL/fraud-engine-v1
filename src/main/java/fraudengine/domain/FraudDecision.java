@@ -1,5 +1,7 @@
 package fraudengine.domain;
 
+import org.jspecify.annotations.Nullable;
+
 import java.time.Instant;
 import java.util.Collections;
 import java.util.List;
@@ -21,17 +23,30 @@ public record FraudDecision(
         long totalExecutionTimeNanos,
         String primaryReason
 ) {
-    public FraudDecision {
-        Objects.requireNonNull(evaluationId, "evaluationId cannot be null");
-        Objects.requireNonNull(transactionId, "transactionId cannot be null");
-        Objects.requireNonNull(accountId, "accountId cannot be null");
-        Objects.requireNonNull(action, "action cannot be null");
-        Objects.requireNonNull(riskLevel, "riskLevel cannot be null");
-        Objects.requireNonNull(evaluatedAt, "evaluatedAt cannot be null");
-
-        triggeredRules = triggeredRules == null ? Collections.emptyList() : List.copyOf(triggeredRules);
-        allEvaluatedRules = allEvaluatedRules == null ? Collections.emptyList() : List.copyOf(allEvaluatedRules);
-        primaryReason = primaryReason == null ? "Evaluation complete" : primaryReason;
+    public FraudDecision(
+            String evaluationId,
+            String transactionId,
+            String accountId,
+            Action action,
+            RiskLevel riskLevel,
+            int aggregateRiskScore,
+            @Nullable List<RuleResult> triggeredRules,
+            @Nullable List<RuleResult> allEvaluatedRules,
+            Instant evaluatedAt,
+            long totalExecutionTimeNanos,
+            @Nullable String primaryReason
+    ) {
+        this.evaluationId = Objects.requireNonNull(evaluationId, "evaluationId cannot be null");
+        this.transactionId = Objects.requireNonNull(transactionId, "transactionId cannot be null");
+        this.accountId = Objects.requireNonNull(accountId, "accountId cannot be null");
+        this.action = Objects.requireNonNull(action, "action cannot be null");
+        this.riskLevel = Objects.requireNonNull(riskLevel, "riskLevel cannot be null");
+        this.aggregateRiskScore = aggregateRiskScore;
+        this.triggeredRules = triggeredRules == null ? Collections.emptyList() : List.copyOf(triggeredRules);
+        this.allEvaluatedRules = allEvaluatedRules == null ? Collections.emptyList() : List.copyOf(allEvaluatedRules);
+        this.evaluatedAt = Objects.requireNonNull(evaluatedAt, "evaluatedAt cannot be null");
+        this.totalExecutionTimeNanos = totalExecutionTimeNanos;
+        this.primaryReason = primaryReason == null ? "Evaluation complete" : primaryReason;
     }
 
     public boolean isApproved() {

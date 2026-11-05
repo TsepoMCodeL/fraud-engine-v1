@@ -16,6 +16,7 @@ import fraudengine.rules.GeoVelocityAnomalyRule;
 import fraudengine.rules.HighAmountAnomalyRule;
 import fraudengine.rules.ShortWindowVelocityRule;
 import fraudengine.rules.TransactionVelocityRule;
+import org.jspecify.annotations.Nullable;
 import tools.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -42,13 +43,14 @@ public class FraudEngineAutoConfiguration {
             ObjectProvider<StringRedisTemplate> redisTemplateProvider,
             ObjectProvider<ObjectMapper> objectMapperProvider
     ) {
-        StringRedisTemplate redisTemplate = redisTemplateProvider.getIfAvailable();
+        @Nullable StringRedisTemplate redisTemplate = redisTemplateProvider.getIfAvailable();
         if (redisTemplate != null) {
+            @Nullable ObjectMapper objectMapper = objectMapperProvider.getIfAvailable();
             log.info("Configuring RedisContextEnricher with prefix '{}' and TTL {}h",
                     properties.getRedisKeyPrefix(), properties.getVelocityTtlHours());
             return new RedisContextEnricher(
                     redisTemplate,
-                    objectMapperProvider.getIfAvailable(),
+                    objectMapper,
                     properties.getRedisKeyPrefix(),
                     Duration.ofHours(properties.getVelocityTtlHours())
             );

@@ -3,6 +3,7 @@ package fraudengine.enrichment;
 import fraudengine.domain.CustomerProfile;
 import fraudengine.domain.EnrichedContext;
 import fraudengine.domain.Transaction;
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataAccessException;
@@ -49,9 +50,9 @@ public class RedisContextEnricher implements ContextEnricher {
 
     public RedisContextEnricher(
             RedisOperations<String, String> redisOperations,
-            ObjectMapper objectMapper,
-            String keyPrefix,
-            Duration velocityTtl
+            @Nullable ObjectMapper objectMapper,
+            @Nullable String keyPrefix,
+            @Nullable Duration velocityTtl
     ) {
         this.redisOperations = Objects.requireNonNull(redisOperations, "redisOperations cannot be null");
         this.keyPrefix = (keyPrefix != null && !keyPrefix.isBlank()) ? keyPrefix : DEFAULT_KEY_PREFIX;

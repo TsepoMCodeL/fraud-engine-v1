@@ -465,4 +465,16 @@ class FraudEvaluationControllerTest {
                 .andExpect(jsonPath("$.error").value("Not Found"))
                 .andExpect(jsonPath("$.message").value("Transaction not found"));
     }
+
+    @Test
+    @DisplayName("GET /api/v1/fraud/accounts/{id}/evaluations: Invalid parameter type returns 400 Bad Request")
+    void shouldReturnBadRequestForInvalidQueryParameterType() throws Exception {
+        mockMvc.perform(get("/api/v1/fraud/accounts/ACC-1/evaluations")
+                        .param("page", "not-a-number")
+                        .header("Authorization", basicAuthHeader("test-admin", "test-password")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.error").value("Bad Request"))
+                .andExpect(jsonPath("$.message", containsString("Parameter 'page' with value 'not-a-number' could not be converted to int")));
+    }
 }

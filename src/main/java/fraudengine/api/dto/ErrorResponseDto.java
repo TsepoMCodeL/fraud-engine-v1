@@ -11,6 +11,10 @@ public record ErrorResponseDto(
         List<String> details,
         String path
 ) {
+    public ErrorResponseDto {
+        details = List.copyOf(details);
+    }
+
     public static ErrorResponseDto of(int status, String error, String message, List<String> details, String path) {
         return new ErrorResponseDto(Instant.now(), status, error, message, details, path);
     }

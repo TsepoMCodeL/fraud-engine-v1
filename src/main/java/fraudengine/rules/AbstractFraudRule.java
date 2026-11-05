@@ -5,6 +5,8 @@ import fraudengine.domain.RuleResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Objects;
+
 /**
  * Base template implementation providing execution timing and exception isolation.
  */
@@ -19,10 +21,10 @@ public abstract class AbstractFraudRule implements FraudRule {
     private final boolean shortCircuit;
 
     protected AbstractFraudRule(String id, String name, int priority, RuleCategory category, boolean shortCircuit) {
-        this.id = id;
-        this.name = name;
+        this.id = Objects.requireNonNull(id, "id cannot be null");
+        this.name = Objects.requireNonNull(name, "name cannot be null");
         this.priority = priority;
-        this.category = category;
+        this.category = Objects.requireNonNull(category, "category cannot be null");
         this.shortCircuit = shortCircuit;
     }
 

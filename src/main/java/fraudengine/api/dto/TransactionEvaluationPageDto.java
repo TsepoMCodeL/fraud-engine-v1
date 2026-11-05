@@ -9,4 +9,7 @@ public record TransactionEvaluationPageDto(
         long totalElements,
         int totalPages
 ) {
+    public TransactionEvaluationPageDto {
+        content = List.copyOf(content);
+    }
 }

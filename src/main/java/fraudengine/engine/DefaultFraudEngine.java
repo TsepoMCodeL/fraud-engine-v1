@@ -18,12 +18,14 @@ import fraudengine.rules.GeoVelocityAnomalyRule;
 import fraudengine.rules.HighAmountAnomalyRule;
 import fraudengine.rules.ShortWindowVelocityRule;
 import fraudengine.rules.TransactionVelocityRule;
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
@@ -52,22 +54,24 @@ public class DefaultFraudEngine implements FraudEngine {
             List<FraudRule> rules,
             ContextEnricher contextEnricher,
             DecisionEngine decisionEngine,
-            FraudEngineConfig config,
-            List<FraudAuditListener> auditListeners
+            @Nullable FraudEngineConfig config,
+            @Nullable List<FraudAuditListener> auditListeners
     ) {
         Objects.requireNonNull(rules, "rules cannot be null");
         Objects.requireNonNull(contextEnricher, "contextEnricher cannot be null");
         Objects.requireNonNull(decisionEngine, "decisionEngine cannot be null");
+
         this.config = config != null ? config : FraudEngineConfig.defaultConfig();
         this.contextEnricher = contextEnricher;
         this.decisionEngine = decisionEngine;
 
-        // Sort rules by priority
         List<FraudRule> sorted = new ArrayList<>(rules);
-        Collections.sort(sorted);
-        this.rules = Collections.unmodifiableList(sorted);
+        sorted.sort(Comparator.naturalOrder());
+        this.rules = List.copyOf(sorted);
 
-        this.auditListeners = new CopyOnWriteArrayList<>(auditListeners != null ? auditListeners : Collections.emptyList());
+        this.auditListeners = new CopyOnWriteArrayList<>(
+                auditListeners != null ? auditListeners : List.of()
+        );
     }
 
     public static Builder builder() {
@@ -76,15 +80,19 @@ public class DefaultFraudEngine implements FraudEngine {
 
     @Override
     public FraudDecision evaluate(Transaction transaction) {
+        Objects.requireNonNull(transaction, "transaction cannot be null");
         return evaluate(transaction, CustomerProfile.defaultProfile(transaction.accountId()));
     }
 
     @Override
     public FraudDecision evaluate(Transaction transaction, CustomerProfile profile) {
+        Objects.requireNonNull(transaction, "transaction cannot be null");
+        Objects.requireNonNull(profile, "profile cannot be null");
+
         long startNanos = System.nanoTime();
         String evaluationId = UUID.randomUUID().toString();
 
-        FraudEvaluationContext context = null;
+        @Nullable FraudEvaluationContext context = null;
         try {
             EnrichedContext enrichment = contextEnricher.enrich(transaction, profile);
             context = new FraudEvaluationContext(transaction, profile, enrichment);

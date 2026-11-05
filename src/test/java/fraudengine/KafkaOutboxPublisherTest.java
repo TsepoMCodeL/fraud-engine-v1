@@ -173,4 +173,27 @@ class KafkaOutboxPublisherTest {
         verify(outboxRepository).markPublished(4, "c2");
         verify(outboxRepository).markPublished(5, "c3");
     }
+
+    @Test
+    void delegatesPostgresOutboxUpdatesToConfiguredExecutor() {
+        java.util.concurrent.atomic.AtomicBoolean executorUsed = new java.util.concurrent.atomic.AtomicBoolean();
+        java.util.concurrent.Executor customExecutor = command -> {
+            executorUsed.set(true);
+            command.run();
+        };
+        KafkaOutboxPublisher customPublisher =
+                new KafkaOutboxPublisher(outboxRepository, kafkaTemplate, properties, customExecutor);
+
+        OutboxMessage message = new OutboxMessage(
+                1, "event-1", "account-1", "{\"eventId\":\"event-1\"}", 0, "claim-1");
+        when(outboxRepository.claimPending(eq(50), any(Instant.class))).thenReturn(List.of(message));
+        when(kafkaTemplate.send(properties.getTopic(), message.accountId(), message.payload()))
+                .thenReturn(CompletableFuture.completedFuture(null));
+
+        customPublisher.publishPending();
+
+        org.junit.jupiter.api.Assertions.assertTrue(executorUsed.get(),
+                "Outbox update must be dispatched to the provided executor");
+        verify(outboxRepository).markPublished(message.id(), message.claimToken());
+    }
 }

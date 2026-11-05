@@ -1,10 +1,14 @@
 package fraudengine.domain;
 
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
+
 import java.util.Objects;
 
 /**
  * Immutable geolocation coordinates with distance computation via Haversine formula.
  */
+@NullMarked
 public record GeoLocation(double latitude, double longitude, String countryCode) {
 
     private static final double EARTH_RADIUS_KM = 6371.0;
@@ -22,7 +26,7 @@ public record GeoLocation(double latitude, double longitude, String countryCode)
     /**
      * Calculates great-circle distance in kilometers to another location.
      */
-    public double distanceKmTo(GeoLocation other) {
+    public double distanceKmTo(@Nullable GeoLocation other) {
         if (other == null) return 0.0;
 
         double lat1Rad = Math.toRadians(this.latitude);

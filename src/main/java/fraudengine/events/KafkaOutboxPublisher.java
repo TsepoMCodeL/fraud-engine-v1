@@ -3,8 +3,11 @@ package fraudengine.events;
 import fraudengine.config.FraudKafkaProperties;
 import fraudengine.persistence.FraudEvaluationOutboxRepository;
 import fraudengine.persistence.FraudEvaluationOutboxRepository.OutboxMessage;
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -16,6 +19,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executor;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -31,15 +35,27 @@ public class KafkaOutboxPublisher {
     private final FraudEvaluationOutboxRepository outboxRepository;
     private final KafkaTemplate<String, String> kafkaTemplate;
     private final FraudKafkaProperties properties;
+    private final Executor executor;
 
     public KafkaOutboxPublisher(
             FraudEvaluationOutboxRepository outboxRepository,
             KafkaTemplate<String, String> kafkaTemplate,
             FraudKafkaProperties properties
     ) {
+        this(outboxRepository, kafkaTemplate, properties, Runnable::run);
+    }
+
+    @Autowired
+    public KafkaOutboxPublisher(
+            FraudEvaluationOutboxRepository outboxRepository,
+            KafkaTemplate<String, String> kafkaTemplate,
+            FraudKafkaProperties properties,
+            @Qualifier("outboxPublisherExecutor") @Nullable Executor outboxPublisherExecutor
+    ) {
         this.outboxRepository = outboxRepository;
         this.kafkaTemplate = kafkaTemplate;
         this.properties = properties;
+        this.executor = outboxPublisherExecutor != null ? outboxPublisherExecutor : Runnable::run;
     }
 
     @Scheduled(fixedDelayString = "${fraud.kafka.outbox-poll-interval-ms:1000}")
@@ -68,7 +84,7 @@ public class KafkaOutboxPublisher {
             try {
                 CompletableFuture<Throwable> result = kafkaTemplate
                         .send(properties.getTopic(), message.accountId(), message.payload())
-                        .handle((sendResult, failure) -> {
+                        .handleAsync((sendResult, failure) -> {
                             try {
                                 if (failure == null) {
                                     outboxRepository.markPublished(message.id(), message.claimToken());
@@ -79,7 +95,7 @@ public class KafkaOutboxPublisher {
                                 log.error("Failed to update outbox state for event {}", message.eventId(), ex);
                             }
                             return failure;
-                        });
+                        }, executor);
                 pendingSends.add(new PendingSend(message, result));
             } catch (Exception ex) {
                 markFailed(message, ex);

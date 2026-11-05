@@ -9,9 +9,11 @@ import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.ObjectWriter;
 
-import java.sql.Timestamp;
 import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 
 @Repository
@@ -30,9 +32,10 @@ public class JdbcFraudEvaluationOutboxRepository implements FraudEvaluationOutbo
             ObjectMapper objectMapper,
             FraudEvaluationOutboxSql sql
     ) {
-        this.jdbcClient = jdbcClient;
-        this.eventWriter = objectMapper.writerFor(FraudEvaluationCompletedEvent.class);
-        this.sql = sql;
+        this.jdbcClient = Objects.requireNonNull(jdbcClient, "jdbcClient cannot be null");
+        this.eventWriter = Objects.requireNonNull(objectMapper, "objectMapper cannot be null")
+                .writerFor(FraudEvaluationCompletedEvent.class);
+        this.sql = Objects.requireNonNull(sql, "sql cannot be null");
     }
 
     @Override
@@ -69,7 +72,7 @@ public class JdbcFraudEvaluationOutboxRepository implements FraudEvaluationOutbo
             jdbcClient.sql(sql.markClaimed())
                     .param("ids", ids)
                     .param("claimToken", claimToken)
-                    .param("claimUntil", Timestamp.from(claimUntil))
+                    .param("claimUntil", OffsetDateTime.ofInstant(claimUntil, ZoneOffset.UTC))
                     .update();
         }
 
@@ -93,7 +96,7 @@ public class JdbcFraudEvaluationOutboxRepository implements FraudEvaluationOutbo
                 .param("id", id)
                 .param("claimToken", claimToken)
                 .param("lastError", error)
-                .param("nextAttemptAt", Timestamp.from(nextAttemptAt))
+                .param("nextAttemptAt", OffsetDateTime.ofInstant(nextAttemptAt, ZoneOffset.UTC))
                 .update();
         if (updated == 0) {
             log.warn("Outbox message {} was not marked as failed; claim lease may have expired or token mismatch", id);
@@ -106,7 +109,7 @@ public class JdbcFraudEvaluationOutboxRepository implements FraudEvaluationOutbo
         int iteration = 0;
         do {
             deleted = jdbcClient.sql(sql.deletePublished())
-                    .param("publishedBefore", Timestamp.from(publishedBefore))
+                    .param("publishedBefore", OffsetDateTime.ofInstant(publishedBefore, ZoneOffset.UTC))
                     .param("batchSize", PURGE_BATCH_SIZE)
                     .update();
             iteration++;
