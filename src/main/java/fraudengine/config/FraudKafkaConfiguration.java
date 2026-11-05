@@ -15,8 +15,7 @@ import java.util.concurrent.Executors;
 public class FraudKafkaConfiguration {
 
     @Bean(name = "outboxPublisherExecutor")
-    @ConditionalOnMissingBean(name = "outboxPublisherExecutor")
-    public Executor outboxPublisherExecutor() {
+    @ConditionalOnMissingBean(name = "outboxPublisherExecutor") Executor outboxPublisherExecutor() {
         return Executors.newVirtualThreadPerTaskExecutor();
     }
 }
