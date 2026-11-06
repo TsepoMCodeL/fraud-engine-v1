@@ -7,7 +7,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 
 @Component
-public class FraudEvaluationSql {
+public class FraudEvaluationQueries {
 
     private final String availability;
     private final String insertEvaluation;
@@ -20,7 +20,7 @@ public class FraudEvaluationSql {
     private final String findAccountEvaluations;
     private final String countAccountEvaluations;
 
-    public FraudEvaluationSql() {
+    public FraudEvaluationQueries() {
         availability = load("availability.sql");
         insertEvaluation = load("insert-evaluation.sql");
         findEvaluationById = load("find-evaluation-by-id.sql");

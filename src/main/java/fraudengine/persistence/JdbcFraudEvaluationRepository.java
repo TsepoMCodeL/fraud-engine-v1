@@ -27,7 +27,7 @@ public class JdbcFraudEvaluationRepository implements FraudEvaluationRepository 
     private static final Logger log = LoggerFactory.getLogger(JdbcFraudEvaluationRepository.class);
 
     private final JdbcClient jdbcClient;
-    private final FraudEvaluationSql sql;
+    private final FraudEvaluationQueries sql;
     private final ObjectWriter transactionWriter;
     private final ObjectWriter evaluationWriter;
     private final ObjectReader transactionReader;
@@ -36,7 +36,7 @@ public class JdbcFraudEvaluationRepository implements FraudEvaluationRepository 
     public JdbcFraudEvaluationRepository(
             JdbcClient jdbcClient,
             ObjectMapper objectMapper,
-            FraudEvaluationSql sql
+            FraudEvaluationQueries sql
     ) {
         this.jdbcClient = Objects.requireNonNull(jdbcClient, "jdbcClient cannot be null");
         this.sql = Objects.requireNonNull(sql, "sql cannot be null");

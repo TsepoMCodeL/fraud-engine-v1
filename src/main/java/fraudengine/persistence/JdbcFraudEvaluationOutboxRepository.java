@@ -25,12 +25,12 @@ public class JdbcFraudEvaluationOutboxRepository implements FraudEvaluationOutbo
 
     private final JdbcClient jdbcClient;
     private final ObjectWriter eventWriter;
-    private final FraudEvaluationOutboxSql sql;
+    private final FraudEvaluationOutboxQueries sql;
 
     public JdbcFraudEvaluationOutboxRepository(
             JdbcClient jdbcClient,
             ObjectMapper objectMapper,
-            FraudEvaluationOutboxSql sql
+            FraudEvaluationOutboxQueries sql
     ) {
         this.jdbcClient = Objects.requireNonNull(jdbcClient, "jdbcClient cannot be null");
         this.eventWriter = Objects.requireNonNull(objectMapper, "objectMapper cannot be null")

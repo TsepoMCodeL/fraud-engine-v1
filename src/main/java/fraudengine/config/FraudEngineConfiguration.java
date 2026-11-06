@@ -32,9 +32,9 @@ import java.util.List;
 
 @Configuration
 @EnableConfigurationProperties(FraudEngineProperties.class)
-public class FraudEngineAutoConfiguration {
+public class FraudEngineConfiguration {
 
-    private static final Logger log = LoggerFactory.getLogger(FraudEngineAutoConfiguration.class);
+    private static final Logger log = LoggerFactory.getLogger(FraudEngineConfiguration.class);
 
     @Bean
     @ConditionalOnMissingBean(ContextEnricher.class)

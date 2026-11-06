@@ -7,7 +7,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 
 @Component
-public class FraudEvaluationOutboxSql {
+public class FraudEvaluationOutboxQueries {
 
     private final String insert;
     private final String claimPending;
@@ -16,7 +16,7 @@ public class FraudEvaluationOutboxSql {
     private final String markFailed;
     private final String deletePublished;
 
-    public FraudEvaluationOutboxSql() {
+    public FraudEvaluationOutboxQueries() {
         insert = load("insert-outbox-event.sql");
         claimPending = load("claim-outbox-events.sql");
         markClaimed = load("mark-outbox-claimed.sql");
