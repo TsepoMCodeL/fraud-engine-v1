@@ -477,4 +477,36 @@ class FraudEvaluationControllerTest {
                 .andExpect(jsonPath("$.error").value("Bad Request"))
                 .andExpect(jsonPath("$.message", containsString("Parameter 'page' with value 'not-a-number' could not be converted to int")));
     }
+
+    @Test
+    @DisplayName("GET /api/v1/fraud/accounts/{id}/evaluations: Negative page parameter returns 400 Bad Request")
+    void shouldReturnBadRequestForNegativePageParameter() throws Exception {
+        mockMvc.perform(get("/api/v1/fraud/accounts/ACC-1/evaluations")
+                        .param("page", "-1")
+                        .header("Authorization", basicAuthHeader("test-admin", "test-password")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.error").value("Bad Request"))
+                .andExpect(jsonPath("$.details", hasItem(containsString("page must be zero or greater"))));
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/fraud/accounts/{id}/evaluations: Out-of-bounds size parameter returns 400 Bad Request")
+    void shouldReturnBadRequestForOutOfBoundsSizeParameter() throws Exception {
+        mockMvc.perform(get("/api/v1/fraud/accounts/ACC-1/evaluations")
+                        .param("size", "0")
+                        .header("Authorization", basicAuthHeader("test-admin", "test-password")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.error").value("Bad Request"))
+                .andExpect(jsonPath("$.details", hasItem(containsString("size must be at least 1"))));
+
+        mockMvc.perform(get("/api/v1/fraud/accounts/ACC-1/evaluations")
+                        .param("size", "101")
+                        .header("Authorization", basicAuthHeader("test-admin", "test-password")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.error").value("Bad Request"))
+                .andExpect(jsonPath("$.details", hasItem(containsString("size must be at most 100"))));
+    }
 }

@@ -1,6 +1,5 @@
 package fraudengine.domain;
 
-import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 
 import java.util.Collections;
@@ -11,7 +10,6 @@ import java.util.Optional;
 /**
  * Real-time dynamic features enriched by the feature store prior to rule evaluation.
  */
-@NullMarked
 public record EnrichedContext(
         int transactionsLast1Minute,
         int transactionsLast10Minutes,

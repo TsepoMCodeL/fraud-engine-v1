@@ -1,7 +1,5 @@
 package fraudengine.domain;
 
-import org.jspecify.annotations.NullMarked;
-
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
@@ -11,7 +9,6 @@ import java.util.Set;
 /**
  * Historical customer profile baseline for anomaly detection.
  */
-@NullMarked
 public record CustomerProfile(
         String accountId,
         Instant accountCreatedAt,

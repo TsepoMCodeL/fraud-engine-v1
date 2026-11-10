@@ -1,7 +1,10 @@
 package fraudengine.config;
 
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.validation.annotation.Validated;
 
@@ -20,16 +23,21 @@ public class FraudEngineProperties {
     /**
      * Time-to-live in hours for account velocity sorted sets in Redis.
      */
+    @Positive(message = "velocityTtlHours must be strictly positive")
     private int velocityTtlHours = 48;
 
     /**
      * Minimum composite risk score [0-100] required to route a transaction to manual review or step-up auth.
      */
+    @Min(value = 0, message = "reviewThreshold must be at least 0")
+    @Max(value = 100, message = "reviewThreshold must be at most 100")
     private int reviewThreshold = 40;
 
     /**
      * Minimum composite risk score [0-100] required to decline/block a transaction.
      */
+    @Min(value = 0, message = "declineThreshold must be at least 0")
+    @Max(value = 100, message = "declineThreshold must be at most 100")
     private int declineThreshold = 75;
 
     /**

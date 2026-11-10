@@ -17,6 +17,7 @@ import fraudengine.persistence.FraudEvaluationPersistenceService;
 import fraudengine.persistence.FraudEvaluationRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Instant;
@@ -69,26 +70,31 @@ public class FraudEvaluationService {
         return response;
     }
 
+    @Transactional(readOnly = true)
     public TransactionEvaluationResponseDto getEvaluation(String evaluationId) {
         return evaluationRepository.findByEvaluationId(evaluationId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Evaluation not found"));
     }
 
+    @Transactional(readOnly = true)
     public Transaction getTransaction(String transactionId) {
         return evaluationRepository.findTransactionById(transactionId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Transaction not found"));
     }
 
+    @Transactional(readOnly = true)
     public TransactionPageDto getAccountTransactions(String accountId, int page, int size) {
         validatePage(page, size);
         return evaluationRepository.findTransactionsByAccountId(accountId, page, size);
     }
 
+    @Transactional(readOnly = true)
     public TransactionEvaluationPageDto getTransactionEvaluations(String transactionId, int page, int size) {
         validatePage(page, size);
         return evaluationRepository.findByTransactionId(transactionId, page, size);
     }
 
+    @Transactional(readOnly = true)
     public TransactionEvaluationPageDto getAccountEvaluations(String accountId, int page, int size) {
         validatePage(page, size);
         return evaluationRepository.findByAccountId(accountId, page, size);

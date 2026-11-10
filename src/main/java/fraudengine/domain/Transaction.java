@@ -1,6 +1,5 @@
 package fraudengine.domain;
 
-import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 
 import java.math.BigDecimal;
@@ -13,7 +12,6 @@ import java.util.Objects;
 /**
  * Immutable transaction event submitted to the fraud engine for evaluation.
  */
-@NullMarked
 public record Transaction(
         String id,
         String accountId,

@@ -1,6 +1,5 @@
 package fraudengine.domain;
 
-import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 
 import java.util.Objects;
@@ -8,7 +7,6 @@ import java.util.Objects;
 /**
  * Immutable geolocation coordinates with distance computation via Haversine formula.
  */
-@NullMarked
 public record GeoLocation(double latitude, double longitude, String countryCode) {
 
     private static final double EARTH_RADIUS_KM = 6371.0;
@@ -42,7 +40,7 @@ public record GeoLocation(double latitude, double longitude, String countryCode)
                 * Math.sin(deltaLon / 2) * Math.sin(deltaLon / 2);
 
         double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
         return EARTH_RADIUS_KM * c;
     }
 }
-

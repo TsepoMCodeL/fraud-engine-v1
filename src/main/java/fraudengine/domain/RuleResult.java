@@ -1,6 +1,5 @@
 package fraudengine.domain;
 
-import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 
 import java.util.Collections;
@@ -13,7 +12,6 @@ import fraudengine.rules.RuleCategory;
 /**
  * Output produced by evaluating an individual rule against a transaction context.
  */
-@NullMarked
 public record RuleResult(
         String ruleId,
         String ruleName,
@@ -21,7 +19,7 @@ public record RuleResult(
         boolean triggered,
         int riskScore,
         Action recommendedAction,
-        String reason,
+        @Nullable String reason,
         Map<String, Object> attributes,
         long executionTimeNanos
 ) {
@@ -32,7 +30,7 @@ public record RuleResult(
             boolean triggered,
             int riskScore,
             Action recommendedAction,
-            String reason,
+            @Nullable String reason,
             @Nullable Map<String, Object> attributes,
             long executionTimeNanos
     ) {

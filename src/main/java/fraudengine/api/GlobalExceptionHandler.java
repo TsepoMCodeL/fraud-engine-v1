@@ -2,6 +2,7 @@ package fraudengine.api;
 
 import fraudengine.api.dto.ErrorResponseDto;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.ConstraintViolationException;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -12,6 +13,7 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.HandlerMethodValidationException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -40,6 +42,52 @@ public class GlobalExceptionHandler {
                 HttpStatus.BAD_REQUEST.value(),
                 HttpStatus.BAD_REQUEST.getReasonPhrase(),
                 "Validation failed for request payload",
+                errors,
+                request.getRequestURI()
+        );
+
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+    }
+
+    @ExceptionHandler(HandlerMethodValidationException.class)
+    public ResponseEntity<ErrorResponseDto> handleHandlerMethodValidationException(
+            HandlerMethodValidationException ex,
+            HttpServletRequest request
+    ) {
+        List<String> errors = new ArrayList<>();
+        for (var validationResult : ex.getParameterValidationResults()) {
+            String paramName = validationResult.getMethodParameter().getParameterName();
+            for (var resolvableError : validationResult.getResolvableErrors()) {
+                String prefix = paramName != null ? paramName + ": " : "";
+                errors.add(prefix + Objects.requireNonNullElse(resolvableError.getDefaultMessage(), "Invalid value"));
+            }
+        }
+
+        ErrorResponseDto response = ErrorResponseDto.of(
+                HttpStatus.BAD_REQUEST.value(),
+                HttpStatus.BAD_REQUEST.getReasonPhrase(),
+                "Validation failed for request parameter",
+                errors,
+                request.getRequestURI()
+        );
+
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+    }
+
+    @ExceptionHandler(ConstraintViolationException.class)
+    public ResponseEntity<ErrorResponseDto> handleConstraintViolationException(
+            ConstraintViolationException ex,
+            HttpServletRequest request
+    ) {
+        List<String> errors = new ArrayList<>();
+        for (var violation : ex.getConstraintViolations()) {
+            errors.add(violation.getPropertyPath() + ": " + violation.getMessage());
+        }
+
+        ErrorResponseDto response = ErrorResponseDto.of(
+                HttpStatus.BAD_REQUEST.value(),
+                HttpStatus.BAD_REQUEST.getReasonPhrase(),
+                "Validation failed for request parameter",
                 errors,
                 request.getRequestURI()
         );

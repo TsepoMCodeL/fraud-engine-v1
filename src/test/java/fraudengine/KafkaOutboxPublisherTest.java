@@ -4,6 +4,7 @@ import fraudengine.config.FraudKafkaProperties;
 import fraudengine.events.KafkaOutboxPublisher;
 import fraudengine.persistence.FraudEvaluationOutboxRepository;
 import fraudengine.persistence.FraudEvaluationOutboxRepository.OutboxMessage;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.support.SendResult;
@@ -30,6 +31,7 @@ class KafkaOutboxPublisherTest {
             new KafkaOutboxPublisher(outboxRepository, kafkaTemplate, properties);
 
     @Test
+    @DisplayName("Marks outbox message as published after Kafka broker successfully acknowledges")
     void marksOutboxMessagePublishedAfterKafkaAcknowledges() {
         OutboxMessage message = new OutboxMessage(
                 1, "event-1", "account-1", "{\"eventId\":\"event-1\"}", 0, "claim-1");
@@ -47,6 +49,7 @@ class KafkaOutboxPublisherTest {
     }
 
     @Test
+    @DisplayName("Schedules retry with exponential backoff delay when Kafka produce fails")
     void schedulesRetryWhenKafkaSendFails() {
         OutboxMessage message = new OutboxMessage(
                 1, "event-1", "account-1", "{\"eventId\":\"event-1\"}", 0, "claim-1");
@@ -67,6 +70,7 @@ class KafkaOutboxPublisherTest {
     }
 
     @Test
+    @DisplayName("Publishes claimed batch concurrently and acknowledges each event independently")
     void publishesBatchConcurrentlyAndAcknowledgesEachMessage() {
         OutboxMessage first = new OutboxMessage(
                 1, "event-1", "account-1", "{\"eventId\":\"event-1\"}", 0, "claim-1");
@@ -87,6 +91,7 @@ class KafkaOutboxPublisherTest {
     }
 
     @Test
+    @DisplayName("Claim lease dynamically extends to cover blocking send time for entire batch")
     void claimLeaseCoversBlockingSendTimeForTheWholeBatch() {
         Instant now = Instant.now();
         when(outboxRepository.claimPending(eq(50), any(Instant.class))).thenAnswer(invocation -> {
@@ -103,6 +108,7 @@ class KafkaOutboxPublisherTest {
     }
 
     @Test
+    @DisplayName("Handles synchronous exception thrown during template send gracefully without aborting batch")
     void handlesUnexpectedExceptionDuringSendGracefully() {
         OutboxMessage message = new OutboxMessage(
                 1, "event-1", "account-1", "{\"eventId\":\"event-1\"}", 0, "claim-1");
@@ -121,6 +127,7 @@ class KafkaOutboxPublisherTest {
     }
 
     @Test
+    @DisplayName("In-flight asynchronous send timeout does not prematurely mark lease as failed")
     void inFlightSendTimesOutWithoutPrematurelyFailingLease() {
         properties.setPublishTimeout(Duration.ofMillis(50));
         OutboxMessage message = new OutboxMessage(
@@ -145,6 +152,7 @@ class KafkaOutboxPublisherTest {
     }
 
     @Test
+    @DisplayName("Drains consecutive outbox batches continuously up to maxDrainBatches limit")
     void drainsConsecutiveBatchesWhenBacklogIsPresent() {
         properties.setOutboxBatchSize(2);
         properties.setMaxDrainBatches(3);
@@ -175,6 +183,7 @@ class KafkaOutboxPublisherTest {
     }
 
     @Test
+    @DisplayName("Dispatches outbox status persistence update callbacks to configured background executor")
     void delegatesPostgresOutboxUpdatesToConfiguredExecutor() {
         java.util.concurrent.atomic.AtomicBoolean executorUsed = new java.util.concurrent.atomic.AtomicBoolean();
         java.util.concurrent.Executor customExecutor = command -> {
