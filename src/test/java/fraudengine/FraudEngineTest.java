@@ -6,7 +6,15 @@ import org.junit.jupiter.api.Test;
 
 import fraudengine.decision.DecisionThresholds;
 import fraudengine.decision.ThresholdDecisionEngine;
-import fraudengine.domain.*;
+import fraudengine.domain.Action;
+import fraudengine.domain.CustomerProfile;
+import fraudengine.domain.EnrichedContext;
+import fraudengine.domain.FraudDecision;
+import fraudengine.domain.FraudEvaluationContext;
+import fraudengine.domain.GeoLocation;
+import fraudengine.domain.RiskLevel;
+import fraudengine.domain.RuleResult;
+import fraudengine.domain.Transaction;
 import fraudengine.engine.DefaultFraudEngine;
 import fraudengine.engine.FraudEngine;
 import fraudengine.engine.FraudEngineConfig;

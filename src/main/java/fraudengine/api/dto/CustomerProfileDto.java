@@ -1,11 +1,9 @@
 package fraudengine.api.dto;
 
 import java.math.BigDecimal;
-import java.time.Clock;
 import java.time.Instant;
 import java.util.Set;
 
-import fraudengine.domain.CustomerProfile;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -28,17 +26,4 @@ public record CustomerProfileDto(
 
         @Schema(description = "Whether customer has VIP status", example = "false")
         @Nullable Boolean isVip
-) {
-
-    public CustomerProfile toDomain(String accountId, Clock clock) {
-        return new CustomerProfile(
-                accountId,
-                accountCreatedAt != null ? accountCreatedAt : clock.instant(),
-                averageTransactionAmount != null
-                        ? averageTransactionAmount
-                        : CustomerProfile.DEFAULT_AVERAGE_TRANSACTION_AMOUNT,
-                trustScore != null ? trustScore : CustomerProfile.DEFAULT_TRUST_SCORE,
-                knownDeviceIds != null ? knownDeviceIds : Set.of(),
-                Boolean.TRUE.equals(isVip));
-    }
-}
+) {}

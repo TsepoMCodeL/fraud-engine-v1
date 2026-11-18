@@ -63,10 +63,6 @@ public class RedisContextEnricher implements ContextEnricher {
         this.transactionReader = mapper.readerFor(Transaction.class);
     }
 
-    public RedisContextEnricher(RedisOperations<String, String> redisOperations) {
-        this(redisOperations, null, DEFAULT_KEY_PREFIX, DEFAULT_VELOCITY_TTL);
-    }
-
     private String velocityKey(String accountId) {
         return keyPrefix + VELOCITY_KEY_SUFFIX + accountId;
     }

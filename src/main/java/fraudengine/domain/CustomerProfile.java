@@ -17,8 +17,8 @@ public record CustomerProfile(
         Set<String> knownDeviceIds,
         boolean isVip
 ) {
-    public static final int DEFAULT_TRUST_SCORE = 50;
-    public static final BigDecimal DEFAULT_AVERAGE_TRANSACTION_AMOUNT = new BigDecimal("100.00");
+    private static final int DEFAULT_TRUST_SCORE = 50;
+    private static final BigDecimal DEFAULT_AVERAGE_TRANSACTION_AMOUNT = new BigDecimal("100.00");
 
     public CustomerProfile {
         Objects.requireNonNull(accountId, "accountId cannot be null");

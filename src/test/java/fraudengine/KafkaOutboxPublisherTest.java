@@ -25,6 +25,7 @@ class KafkaOutboxPublisherTest {
 
     private final FraudEvaluationOutboxRepository outboxRepository =
             mock(FraudEvaluationOutboxRepository.class);
+    @SuppressWarnings("unchecked")
     private final KafkaTemplate<String, String> kafkaTemplate = mock(KafkaTemplate.class);
     private final FraudKafkaProperties properties = new FraudKafkaProperties();
     private final KafkaOutboxPublisher publisher =

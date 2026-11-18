@@ -3,7 +3,13 @@ package fraudengine;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-import fraudengine.domain.*;
+import fraudengine.domain.Action;
+import fraudengine.domain.CustomerProfile;
+import fraudengine.domain.EnrichedContext;
+import fraudengine.domain.FraudEvaluationContext;
+import fraudengine.domain.GeoLocation;
+import fraudengine.domain.RuleResult;
+import fraudengine.domain.Transaction;
 import fraudengine.rules.GeoVelocityAnomalyRule;
 import fraudengine.rules.RuleCategory;
 
