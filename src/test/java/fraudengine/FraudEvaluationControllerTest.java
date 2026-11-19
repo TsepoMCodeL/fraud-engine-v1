@@ -445,6 +445,34 @@ class FraudEvaluationControllerTest {
     }
 
     @Test
+    @DisplayName("GET /actuator/health: Returns 200 with UP status and component breakdown")
+    void shouldReturnActuatorHealthStatus() throws Exception {
+        mockMvc.perform(get("/actuator/health"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("UP"))
+                .andExpect(jsonPath("$.components.fraudEngineHealth.status").value("UP"))
+                .andExpect(jsonPath("$.components.fraudEngineHealth.details.persistence").value("Available"))
+                .andExpect(jsonPath("$.components.fraudEngineHealth.details.enrichmentStore").value("Available"))
+                .andExpect(jsonPath("$.components.db.status").value("UP"));
+    }
+
+    @Test
+    @DisplayName("GET /actuator/health/liveness: Returns 200 with UP status")
+    void shouldReturnActuatorLivenessStatus() throws Exception {
+        mockMvc.perform(get("/actuator/health/liveness"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("UP"));
+    }
+
+    @Test
+    @DisplayName("GET /actuator/health/readiness: Returns 200 with UP status")
+    void shouldReturnActuatorReadinessStatus() throws Exception {
+        mockMvc.perform(get("/actuator/health/readiness"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("UP"));
+    }
+
+    @Test
     @DisplayName("GET /api/v1/fraud/evaluations/{id}: Non-existent evaluation returns 404 Not Found")
     void shouldReturnNotFoundForMissingEvaluation() throws Exception {
         mockMvc.perform(get("/api/v1/fraud/evaluations/NON-EXISTENT-EVAL-ID")

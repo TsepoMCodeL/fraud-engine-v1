@@ -26,7 +26,9 @@ public class FraudEngineSecurityConfiguration {
                         .requestMatchers(
                                 "/swagger-ui.html",
                                 "/swagger-ui/**",
-                                "/v3/api-docs/**").permitAll()
+                                "/v3/api-docs/**",
+                                "/actuator/health",
+                                "/actuator/health/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/actuator/prometheus").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/v1/fraud/blacklist").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.GET,
